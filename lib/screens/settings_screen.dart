@@ -5,7 +5,9 @@ import '../models/analysis_provider.dart';
 import '../models/bankroll.dart';
 import '../models/bets_provider.dart';
 import '../models/matches_provider.dart';
+import '../models/telegram_provider.dart';
 import '../models/value_preset.dart';
+import '../services/telegram_monitor.dart';
 import '../theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -51,6 +53,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(),
           const SizedBox(height: 16),
           const _BankrollSection(),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 16),
+          const _TelegramSection(),
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 16),
@@ -465,6 +471,266 @@ class _BankrollSectionState extends State<_BankrollSection> {
         ElevatedButton(
           onPressed: _save,
           child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _TelegramSection extends StatefulWidget {
+  const _TelegramSection();
+
+  @override
+  State<_TelegramSection> createState() => _TelegramSectionState();
+}
+
+class _TelegramSectionState extends State<_TelegramSection> {
+  final TextEditingController _tokenCtrl = TextEditingController();
+  final TextEditingController _channelCtrl = TextEditingController();
+  bool _showToken = false;
+  bool _initialized = false;
+  bool _testing = false;
+
+  @override
+  void dispose() {
+    _tokenCtrl.dispose();
+    _channelCtrl.dispose();
+    super.dispose();
+  }
+
+  String _mask() => 'tg_•••••set';
+
+  Future<void> _save() async {
+    final v = _tokenCtrl.text.trim();
+    if (v.isEmpty) return;
+    await context.read<TelegramProvider>().setBotToken(v);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Token saved')));
+    setState(() => _tokenCtrl.text = _mask());
+  }
+
+  Future<void> _remove() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Telegram bot token?'),
+        content: const Text(
+          'Monitoring will stop and the token will be deleted from local storage.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove',
+                style: TextStyle(color: AppTheme.red)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await context.read<TelegramProvider>().removeBotToken();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Token removed')));
+    setState(() => _tokenCtrl.clear());
+  }
+
+  Future<void> _test() async {
+    setState(() => _testing = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final name =
+          await context.read<TelegramProvider>().testConnection();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Connected as $name')),
+      );
+    } on TelegramException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Test failed: ${e.message}')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Test failed')),
+      );
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  Future<void> _addChannel() async {
+    var input = _channelCtrl.text.trim();
+    if (input.isEmpty) return;
+    if (!input.startsWith('@')) input = '@$input';
+    if (input.length < 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Channel handle must be at least 4 characters'),
+        ),
+      );
+      return;
+    }
+    await context.read<TelegramProvider>().addChannel(input);
+    setState(() => _channelCtrl.clear());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.watch<TelegramProvider>();
+    if (!_initialized) {
+      _initialized = true;
+      if (p.hasToken) _tokenCtrl.text = _mask();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.send, color: AppTheme.primary),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Telegram Monitor',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            _StatusBadge(active: p.isMonitoring),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _tokenCtrl,
+          obscureText: !_showToken,
+          onTap: () {
+            if (_tokenCtrl.text.contains('•')) _tokenCtrl.clear();
+          },
+          decoration: InputDecoration(
+            hintText: 'Bot token (BotFather)',
+            suffixIcon: IconButton(
+              icon: Icon(
+                _showToken ? Icons.visibility_off : Icons.visibility,
+              ),
+              onPressed: () => setState(() => _showToken = !_showToken),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          children: [
+            ElevatedButton(
+              onPressed: _save,
+              child: const Text('Save'),
+            ),
+            OutlinedButton(
+              onPressed: p.hasToken && !_testing ? _test : null,
+              child: _testing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Test'),
+            ),
+            if (p.hasToken)
+              TextButton(
+                onPressed: _remove,
+                child: const Text(
+                  'Remove',
+                  style: TextStyle(color: AppTheme.red),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Monitored channels',
+          style: TextStyle(color: Colors.grey[400], fontSize: 13),
+        ),
+        const SizedBox(height: 8),
+        if (p.monitoredChannels.isEmpty)
+          Text(
+            'No channels added yet — add @username below.',
+            style: TextStyle(color: Colors.grey[500], fontSize: 12),
+          )
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              for (final ch in p.monitoredChannels)
+                InputChip(
+                  label: Text(ch),
+                  deleteIcon: const Icon(Icons.close, size: 16),
+                  onDeleted: () => p.removeChannel(ch),
+                ),
+            ],
+          ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _channelCtrl,
+                decoration: const InputDecoration(
+                  hintText: '@channelhandle',
+                ),
+                onSubmitted: (_) => _addChannel(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              onPressed: _addChannel,
+              icon: const Icon(Icons.add),
+              label: const Text('Add'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          activeThumbColor: AppTheme.primary,
+          title: const Text(
+            'Monitoring enabled',
+            style: TextStyle(color: Colors.white),
+          ),
+          subtitle: Text(
+            p.hasToken ? 'Polls Telegram every 10s' : 'Save a token first',
+            style: TextStyle(color: Colors.grey[500], fontSize: 12),
+          ),
+          value: p.enabled,
+          onChanged: p.hasToken ? (v) => p.setEnabled(v) : null,
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, size: 14, color: Colors.grey[500]),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Bot must be added as member to channels you want to monitor. '
+                'Create one via @BotFather.',
+                style: TextStyle(color: Colors.grey[500], fontSize: 11),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        SelectableText(
+          'Create bot: https://t.me/BotFather',
+          style: TextStyle(color: Colors.grey[500], fontSize: 11),
         ),
       ],
     );

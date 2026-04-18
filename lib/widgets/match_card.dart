@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../models/match.dart';
+import '../models/matches_provider.dart';
 import '../models/sport.dart';
 import '../theme/app_theme.dart';
 import 'odds_widget.dart';
@@ -127,6 +129,30 @@ class _MatchCardState extends State<MatchCard> {
                             ),
                           ),
                   ),
+                  Consumer<MatchesProvider>(
+                    builder: (_, p, child) {
+                      final watched = p.isWatched(match.id);
+                      return IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                        icon: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: Icon(
+                            watched ? Icons.star : Icons.star_border,
+                            key: ValueKey(watched),
+                            color: watched
+                                ? AppTheme.secondary
+                                : Colors.grey[500],
+                            size: 20,
+                          ),
+                        ),
+                        onPressed: () => p.toggleWatched(match.id),
+                      );
+                    },
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -154,6 +180,42 @@ class _MatchCardState extends State<MatchCard> {
               ),
               const SizedBox(height: 12),
               OddsWidget(odds: match.h2h, hasDraw: match.sport.hasDraw),
+              Consumer<MatchesProvider>(
+                builder: (_, p, child) {
+                  final drift = p.driftForMatch(match.id);
+                  if (drift == null || !drift.hasSignificantMove) {
+                    return const SizedBox.shrink();
+                  }
+                  final dom = drift.dominantDrift;
+                  final pctText =
+                      '${dom.percent > 0 ? '+' : ''}${dom.percent.toStringAsFixed(1)}%';
+                  final color =
+                      dom.percent < 0 ? AppTheme.red : Colors.blue;
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          dom.percent < 0
+                              ? Icons.trending_down
+                              : Icons.trending_up,
+                          size: 14,
+                          color: color,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${dom.side} $pctText',
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ),

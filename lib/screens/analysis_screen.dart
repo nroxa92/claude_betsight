@@ -3,9 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../models/analysis_provider.dart';
 import '../models/recommendation.dart';
+import '../models/sport.dart';
+import '../models/telegram_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bet_entry_sheet.dart';
 import '../widgets/chat_bubble.dart';
+import '../widgets/signal_card.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -76,6 +79,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           if (!p.hasApiKey) return _buildNoApiKeyState();
           return Column(
             children: [
+              _SignalBanner(onView: () => _showSignalSheet(context)),
               Expanded(
                 child: p.messages.isEmpty && !p.isLoading
                     ? _buildEmptyState()
@@ -105,6 +109,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                       ),
               ),
               if (p.hasStagedMatches) _buildStagedBar(p),
+              if (p.hasStagedSignals) _buildStagedSignalsBar(p),
               if (p.error != null) _buildErrorBar(p),
               _buildInputBar(p),
             ],
@@ -176,6 +181,49 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showSignalSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => const _SignalSheet(),
+    );
+  }
+
+  Widget _buildStagedSignalsBar(AnalysisProvider p) {
+    final n = p.stagedSignals.length;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.secondary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppTheme.secondary.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.send, size: 16, color: AppTheme.secondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$n tipster signal${n == 1 ? "" : "s"} staged for next question',
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+          GestureDetector(
+            onTap: p.clearStagedSignals,
+            child: const Icon(Icons.close, size: 16),
+          ),
+        ],
       ),
     );
   }
@@ -297,6 +345,196 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SignalBanner extends StatelessWidget {
+  final VoidCallback onView;
+  const _SignalBanner({required this.onView});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<TelegramProvider>(
+      builder: (_, p, child) {
+        if (p.recentCount == 0) return const SizedBox.shrink();
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppTheme.primary.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.send, size: 16, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${p.recentCount} recent tipster signal${p.recentCount == 1 ? "" : "s"}',
+                  style: const TextStyle(fontSize: 13, color: Colors.white),
+                ),
+              ),
+              GestureDetector(
+                onTap: onView,
+                child: const Text(
+                  'View →',
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SignalSheet extends StatefulWidget {
+  const _SignalSheet();
+
+  @override
+  State<_SignalSheet> createState() => _SignalSheetState();
+}
+
+class _SignalSheetState extends State<_SignalSheet> {
+  Sport? _filter;
+  final Set<String> _selectedIds = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<TelegramProvider>();
+    final list = provider.signalsForSport(_filter);
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.85,
+      maxChildSize: 0.95,
+      builder: (_, scrollController) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Recent Signals',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _filterChip(label: 'All', sport: null),
+                  const SizedBox(width: 8),
+                  _filterChip(
+                      label: '${Sport.soccer.icon} Soccer',
+                      sport: Sport.soccer),
+                  const SizedBox(width: 8),
+                  _filterChip(
+                      label: '${Sport.basketball.icon} Basketball',
+                      sport: Sport.basketball),
+                  const SizedBox(width: 8),
+                  _filterChip(
+                      label: '${Sport.tennis.icon} Tennis',
+                      sport: Sport.tennis),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: list.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No signals in the last 6 hours',
+                        style: TextStyle(color: Colors.grey[400]),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollController,
+                      itemCount: list.length,
+                      itemBuilder: (_, i) {
+                        final s = list[i];
+                        return SignalCard(
+                          signal: s,
+                          selected: _selectedIds.contains(s.id),
+                          onSelectedChanged: (sel) {
+                            setState(() {
+                              if (sel) {
+                                _selectedIds.add(s.id);
+                              } else {
+                                _selectedIds.remove(s.id);
+                              }
+                            });
+                          },
+                        );
+                      },
+                    ),
+            ),
+            if (_selectedIds.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    Text(
+                      '${_selectedIds.length} selected',
+                      style: TextStyle(color: Colors.grey[400]),
+                    ),
+                    const Spacer(),
+                    FilledButton.icon(
+                      onPressed: () {
+                        final selected = list
+                            .where((s) => _selectedIds.contains(s.id))
+                            .toList();
+                        context
+                            .read<AnalysisProvider>()
+                            .stageSelectedSignals(selected);
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Staged ${selected.length} signal${selected.length == 1 ? "" : "s"}',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.check),
+                      label: const Text('Use as context'),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filterChip({required String label, required Sport? sport}) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: _filter == sport,
+      onSelected: (_) => setState(() => _filter = sport),
+      selectedColor: AppTheme.primary.withValues(alpha: 0.3),
     );
   }
 }

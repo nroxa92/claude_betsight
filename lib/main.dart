@@ -5,6 +5,7 @@ import 'models/analysis_provider.dart';
 import 'models/bets_provider.dart';
 import 'models/matches_provider.dart';
 import 'models/navigation_controller.dart';
+import 'models/telegram_provider.dart';
 import 'screens/analysis_screen.dart';
 import 'screens/bets_screen.dart';
 import 'screens/matches_screen.dart';
@@ -26,6 +27,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => MatchesProvider()),
         ChangeNotifierProvider(create: (_) => AnalysisProvider()),
         ChangeNotifierProvider(create: (_) => BetsProvider()),
+        ChangeNotifierProvider(create: (_) => TelegramProvider()),
       ],
       child: const BetSightApp(),
     ),

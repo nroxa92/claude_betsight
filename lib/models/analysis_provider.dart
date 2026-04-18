@@ -5,6 +5,7 @@ import '../services/storage_service.dart';
 import 'analysis_log.dart';
 import 'match.dart';
 import 'recommendation.dart';
+import 'tipster_signal.dart';
 
 class AnalysisProvider extends ChangeNotifier {
   final ClaudeService _service;
@@ -12,6 +13,7 @@ class AnalysisProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   List<Match> _stagedMatches = [];
+  List<TipsterSignal> _stagedSignals = [];
 
   AnalysisProvider({ClaudeService? service})
       : _service = service ?? ClaudeService() {
@@ -34,6 +36,20 @@ class AnalysisProvider extends ChangeNotifier {
   void clearStagedMatches() {
     if (_stagedMatches.isEmpty) return;
     _stagedMatches = [];
+    notifyListeners();
+  }
+
+  List<TipsterSignal> get stagedSignals => List.unmodifiable(_stagedSignals);
+  bool get hasStagedSignals => _stagedSignals.isNotEmpty;
+
+  void stageSelectedSignals(List<TipsterSignal> signals) {
+    _stagedSignals = List.from(signals);
+    notifyListeners();
+  }
+
+  void clearStagedSignals() {
+    if (_stagedSignals.isEmpty) return;
+    _stagedSignals = [];
     notifyListeners();
   }
 
@@ -89,19 +105,36 @@ Never suggest loan-based betting, chasing losses, or increasing stakes after a l
     notifyListeners();
   }
 
-  String _buildUserMessage(String text, List<Match>? contextMatches) {
-    if (contextMatches == null || contextMatches.isEmpty) return text;
+  String _buildUserMessage(
+    String text,
+    List<Match>? contextMatches,
+    List<TipsterSignal>? contextSignals,
+  ) {
+    final hasMatches = contextMatches != null && contextMatches.isNotEmpty;
+    final hasSignals = contextSignals != null && contextSignals.isNotEmpty;
+    if (!hasMatches && !hasSignals) return text;
 
-    final buf = StringBuffer('[SELECTED MATCHES]\n');
-    for (final m in contextMatches) {
-      final h = m.h2h?.home.toStringAsFixed(2) ?? '-';
-      final d = m.h2h?.draw?.toStringAsFixed(2) ?? '-';
-      final a = m.h2h?.away.toStringAsFixed(2) ?? '-';
-      buf.writeln(
-        '${m.league}: ${m.home} vs ${m.away} | odds $h-$d-$a | kickoff ${m.commenceTime.toIso8601String()}',
-      );
+    final buf = StringBuffer();
+    if (hasMatches) {
+      buf.writeln('[SELECTED MATCHES]');
+      for (final m in contextMatches) {
+        final h = m.h2h?.home.toStringAsFixed(2) ?? '-';
+        final d = m.h2h?.draw?.toStringAsFixed(2) ?? '-';
+        final a = m.h2h?.away.toStringAsFixed(2) ?? '-';
+        buf.writeln(
+          '${m.league}: ${m.home} vs ${m.away} | odds $h-$d-$a | kickoff ${m.commenceTime.toIso8601String()}',
+        );
+      }
+      buf.writeln();
     }
-    buf.writeln();
+    if (hasSignals) {
+      buf.writeln('[TIPSTER SIGNALS]');
+      for (final s in contextSignals) {
+        buf.writeln(s.toClaudeContext());
+      }
+      buf.writeln('[/TIPSTER SIGNALS]');
+      buf.writeln();
+    }
     buf.write(text);
     return buf.toString();
   }
@@ -113,8 +146,14 @@ Never suggest loan-based betting, chasing losses, or increasing stakes after a l
     final effectiveContext = contextMatches ??
         (_stagedMatches.isNotEmpty ? _stagedMatches : null);
     final usedStaged = contextMatches == null && _stagedMatches.isNotEmpty;
+    final effectiveSignals =
+        _stagedSignals.isNotEmpty ? _stagedSignals : null;
 
-    final userContent = _buildUserMessage(trimmed, effectiveContext);
+    final userContent = _buildUserMessage(
+      trimmed,
+      effectiveContext,
+      effectiveSignals,
+    );
     final userMessage = ChatMessage(role: 'user', content: userContent);
     _messages.add(userMessage);
     _isLoading = true;
@@ -147,6 +186,9 @@ Never suggest loan-based betting, chasing losses, or increasing stakes after a l
 
       if (usedStaged) {
         _stagedMatches = [];
+      }
+      if (effectiveSignals != null) {
+        _stagedSignals = [];
       }
     } on ClaudeException catch (e) {
       _messages.removeLast();

@@ -5,6 +5,7 @@ import 'package:betsight/models/analysis_provider.dart';
 import 'package:betsight/models/bets_provider.dart';
 import 'package:betsight/models/matches_provider.dart';
 import 'package:betsight/models/navigation_controller.dart';
+import 'package:betsight/models/telegram_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
@@ -17,6 +18,7 @@ Widget _wrap() {
       ChangeNotifierProvider(create: (_) => MatchesProvider()),
       ChangeNotifierProvider(create: (_) => AnalysisProvider()),
       ChangeNotifierProvider(create: (_) => BetsProvider()),
+      ChangeNotifierProvider(create: (_) => TelegramProvider()),
     ],
     child: const BetSightApp(),
   );
@@ -29,6 +31,8 @@ void main() {
     await Hive.openBox('settings');
     await Hive.openBox('analysis_logs');
     await Hive.openBox('bets');
+    await Hive.openBox('tipster_signals');
+    await Hive.openBox('odds_snapshots');
   });
 
   testWidgets('BetSightApp renders with bottom navigation', (tester) async {

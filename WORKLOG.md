@@ -364,7 +364,116 @@
 
 ---
 
+---
+---
+
+## Session 4: 2026-04-18 — Telegram Tipster Monitor + Odds Snapshot Engine
+
+**Kontekst:** S1–S3 izgradili closed loop (Matches → Analyze → Log Bet → Settle → P&L). S4 uvodi prve vanjske intelligence kanale: Telegram tipster monitor (pasivni čitač kanala gdje je bot član) i Odds Snapshot Engine (watched matches + drift detection).
+
+---
+
+### Task 1 — TipsterSignal Model + TelegramMonitor Service + Hive Box
+**Status:** Completed
+
+**Opis:** Data + transport layer za Telegram integraciju. TipsterSignal model nosi telegramMessageId/channelUsername/title/text/receivedAt + heuristički detektirani sport/league + relevance flag. TelegramMonitor implementira polling getUpdates loop (10s interval, 15s timeout, allowed_updates filter na channel_post/message), parsiranje s keyword filterom (tip/bet/value/odds/pick/...) i naivnim sport detection-om (epl/ucl/nba/atp/wta substring), testConnection preko getMe, te lifecycle (setBotToken/start/stop/dispose). Storage proširen za signals box + Telegram settings (token/channels/enabled). Poznato Bot API ograničenje (samo kanali gdje je bot član) zabilježeno u Identified Issues.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/models/tipster_signal.dart` — TipsterSignal model + `preview` getter (truncate 150 char) + `toClaudeContext` (timeAgo + channel + sport + preview) + privatni `_relativeTime` helper + toMap/fromMap.
+- `lib/services/telegram_monitor.dart` — TelegramMonitor klasa s `_botToken`/`_lastUpdateId`/`_pollTimer`; `setBotToken` (rolls monitoring kroz stop/restart ako je bilo aktivno); `startMonitoring`/`stopMonitoring`; `testConnection` preko `/getMe`; privatni `_poll` (silent fail try/catch jer poll ima retry semantiku) i `_parseUpdate` (skip private chats, keyword + sport heuristika); `dispose` cancela timer + close client. TelegramException klasa.
+
+**Ažurirani fajlovi:**
+- `pubspec.yaml` — version bump na `1.3.0+4`.
+- `lib/services/storage_service.dart` — dodan `_tipsterSignalsBox` constant + 3 Telegram settings field-a; `init()` otvara četvrti box; `_signalsBox` getter; `saveSignal`/`getAllSignals` (sort desc, skip malformed) /`clearOldSignals` (default keep 7d, briše po cutoff-u i malformed); `getTelegramToken`/`saveTelegramToken`/`deleteTelegramToken`; `getMonitoredChannels`/`saveMonitoredChannels`; `getTelegramEnabled`/`saveTelegramEnabled`.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 2 — TelegramProvider + Main Lifecycle
+**Status:** Completed
+
+**Opis:** TelegramProvider ChangeNotifier umotava TelegramMonitor; konstruktor učitava saved signals/channels/enabled flag iz Storage, postavlja onSignalReceived callback, postavlja token na monitor i auto-start-a polling ako je `enabled` bio true. `_handleNewSignal` radi dedup po (telegramMessageId, channelUsername) i filter po monitoredChannels (samo ako je lista non-empty — inače propušta sve). Getter `recentSignals` daje 6h prozor; `signalsForSport` filtrira. CRUD metode za bot token, kanale, enabled toggle. `testConnection` pretvara getMe response u username string i nakratko buffer-ira error stanje. Test wrap proširen na peti provider + dodatni Hive box `tipster_signals` u setUpAll.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/models/telegram_provider.dart` — TelegramProvider ChangeNotifier; konstruktor (lifecycle init), getteri (signals/recentSignals/signalsForSport/monitoredChannels/enabled/hasToken/isMonitoring/error/recentCount), metode (setBotToken/removeBotToken/addChannel/removeChannel/setEnabled/testConnection/clearOldSignals/clearError); privatni `_handleNewSignal`; override `dispose` koji disposea monitor.
+
+**Ažurirani fajlovi:**
+- `lib/main.dart` — uvozi TelegramProvider; dodan kao peti provider u MultiProvider.
+- `test/widget_test.dart` — uvozi TelegramProvider; provider list proširen; setUpAll otvara `tipster_signals` Hive box.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan.
+
+---
+
+### Task 3 — Telegram Settings Section
+**Status:** Completed
+
+**Opis:** Settings dobiva novu "Telegram Monitor" sekciju (između Bankroll i About). Header s _StatusBadge (Active/Not set, ovisno o `isMonitoring` umjesto hasToken — daje točan status pollera). Token TextField s obscure + visibility toggle, masked tekst se čisti tap-om. Buttoni Save/Test/Remove s confirm dialogom. Test Connection async preko `provider.testConnection()` s loading spinner-om i SnackBar feedbackom (TelegramException.message ili generic). Monitored channels Wrap od InputChip-ova (delete ikona) + TextField + Add (auto-prepend `@`, validacija min 5 char). SwitchListTile za enable/disable toggle (disabled kad nema token-a). Info footer + SelectableText link na BotFather (info-only, bez url_launcher-a).
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/screens/settings_screen.dart` — uvozi TelegramProvider + TelegramException; nova privatna klasa `_TelegramSection` StatefulWidget (controllers za token i channel input + show/hide flag + initialized flag za masked token + testing flag za spinner); render-a se izmedu Bankroll i About sekcije.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 4 — Signal UI u Analysis Screen + Context Injection
+**Status:** Completed
+
+**Opis:** Analysis screen dobiva 3 nova UI elementa: (a) `_SignalBanner` iznad chat liste — Consumer<TelegramProvider>, vidljiv samo kad `recentCount > 0`, prikazuje broj recent signala + "View →" GestureDetector; (b) `_SignalSheet` (DraggableScrollableSheet 0.85→0.95) — header + Sport filter chip-ovi (All/Soccer/Basketball/Tennis) + ListView SignalCard-ova s checkbox selection-om + footer s "X selected" + FilledButton "Use as context" → `stageSelectedSignals` + Navigator.pop + SnackBar; (c) `_buildStagedSignalsBar` analogan staged matches baru ali secondary boja teal — prikazuje broj staged signala + close ikona. AnalysisProvider proširen s `_stagedSignals` field-om, getter/method API-jem (stage/clear/has) i auto-čistim nakon uspješnog send-a; `_buildUserMessage` sada uzima opcionalne `contextSignals` i dodaje `[TIPSTER SIGNALS]...[/TIPSTER SIGNALS]` blok ispod `[SELECTED MATCHES]`.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/widgets/signal_card.dart` — SignalCard: opcionalni Checkbox (kad je `onSelectedChanged != null`), header s sport icon + channel title + relative time, channel username, preview text, conditional league badge.
+
+**Ažurirani fajlovi:**
+- `lib/models/analysis_provider.dart` — dodan `_stagedSignals` field + getteri/metode (stagedSignals/hasStagedSignals/stageSelectedSignals/clearStagedSignals); `_buildUserMessage` rewritten s 3-arg signature i conditional dva bloka; `sendMessage` koristi `effectiveSignals` i čisti staged signal listu nakon uspjeha.
+- `lib/screens/analysis_screen.dart` — uvozi telegram_provider/sport/signal_card; dodan `_SignalBanner` na vrh Column-a; novi `_showSignalSheet`, `_buildStagedSignalsBar`; nove privatne klase `_SignalBanner`, `_SignalSheet` (StatefulWidget s lokalnim filter + selection state).
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 5 — BONUS: Odds Snapshot Engine
+**Status:** Completed
+
+**Opis:** Watched matches mehanizam s automatic snapshot-anjem pri svakom `fetchMatches()`. OddsSnapshot model + OddsDrift static helper (compute za par snapshota, dominantDrift kao record (side, percent), hasSignificantMove threshold 3%). Storage koristi composite key `${matchId}_${ISO timestamp}` kako bi sve snapshote za jedan match grupirao po prefix-u; `getSnapshotsForMatch` iterira keys. MatchesProvider drži `_watchedMatchIds` Set, perzistira ga u settings boxu, izlaže `isWatched`/`toggleWatched`/`driftForMatch`. MatchCard dobiva animated star toggle (AnimatedSwitcher 250ms) pored countdown-a i conditional drift indicator (ikona trending_up/down + side + signed % u red/blue) ispod OddsWidget-a kad postoji ≥2 snapshota i pomak je značajan.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows, flutter build apk --debug.
+
+**Kreirani fajlovi:**
+- `lib/models/odds_snapshot.dart` — OddsSnapshot (matchId/capturedAt/home/draw/away/bookmaker) + toMap/fromMap; OddsDrift klasa s 3 percent polja, `compute` static factory, `dominantDrift` getter (record syntax `({String side, double percent})`), `hasSignificantMove` threshold.
+
+**Ažurirani fajlovi:**
+- `lib/services/storage_service.dart` — uvozi OddsSnapshot; dodan `_oddsSnapshotsBox` constant + `_watchedMatchIdsField`; `init()` otvara peti box; `_snapshotsBox` getter; `saveSnapshot` (composite key `matchId_ISOtimestamp`), `getSnapshotsForMatch` (key prefix scan, sort capturedAt asc), `clearOldSnapshots` (cutoff + malformed); `getWatchedMatchIds`/`saveWatchedMatchIds`.
+- `lib/models/matches_provider.dart` — uvozi OddsSnapshot; `_watchedMatchIds` field, učitava se iz Storage u konstruktoru; getteri `watchedMatchIds`/`isWatched`; `toggleWatched` perzistira; `driftForMatch` poziva Storage + računa OddsDrift; privatni `_captureSnapshotsForWatched` koji se zove iz `fetchMatches` nakon API odgovora.
+- `lib/widgets/match_card.dart` — uvozi MatchesProvider + provider; star IconButton (AnimatedSwitcher 250ms star_border ↔ star, secondary teal kad je watched) ubacen na desni kraj header Row-a; novi Consumer<MatchesProvider> ispod OddsWidget-a renderira drift indicator (Icons.trending_up/down + dominantDrift.side + signed %, boja red za pad / blue za rast, bold 11px).
+- `test/widget_test.dart` — setUpAll otvara `odds_snapshots` box.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan, flutter build apk --debug uspješan.
+
+---
+
+### Finalna verifikacija Session 4:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build windows — uspješan
+- flutter build apk --debug — uspješan
+- APK u rootu: betsight-v1.3.0.apk (NOT in git — `.gitignore` `*.apk`)
+- Verzija: 1.3.0+4
+- Git: Claude Code NE commit-a/push-a — developer preuzima
+
+---
+
 ## Identified Issues
 
-*No unresolved issues at this time.*
+- **Telegram Bot API limitation:** Bot prima poruke samo iz kanala gdje je dodan kao član. Public tipster kanali koji ne dozvoljavaju bot-ove nisu dostupni kroz Bot API. Za full public channel access trebala bi MTProto migracija u kasnijoj sesiji.
 
