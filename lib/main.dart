@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'models/analysis_provider.dart';
 import 'models/matches_provider.dart';
+import 'models/navigation_controller.dart';
 import 'screens/analysis_screen.dart';
 import 'screens/matches_screen.dart';
 import 'screens/settings_screen.dart';
@@ -19,6 +20,7 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => NavigationController()),
         ChangeNotifierProvider(create: (_) => MatchesProvider()),
         ChangeNotifierProvider(create: (_) => AnalysisProvider()),
       ],
@@ -41,48 +43,45 @@ class BetSightApp extends StatelessWidget {
   }
 }
 
-class MainNavigation extends StatefulWidget {
+class MainNavigation extends StatelessWidget {
   const MainNavigation({super.key});
 
   @override
-  State<MainNavigation> createState() => _MainNavigationState();
-}
-
-class _MainNavigationState extends State<MainNavigation> {
-  int _currentIndex = 0;
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: const [
-          MatchesScreen(),
-          AnalysisScreen(),
-          SettingsScreen(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.scoreboard_outlined),
-            activeIcon: Icon(Icons.scoreboard),
-            label: 'Matches',
+    return Consumer<NavigationController>(
+      builder: (context, nav, child) {
+        return Scaffold(
+          body: IndexedStack(
+            index: nav.currentIndex,
+            children: const [
+              MatchesScreen(),
+              AnalysisScreen(),
+              SettingsScreen(),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.auto_awesome_outlined),
-            activeIcon: Icon(Icons.auto_awesome),
-            label: 'Analysis',
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: nav.currentIndex,
+            onTap: nav.setTab,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.scoreboard_outlined),
+                activeIcon: Icon(Icons.scoreboard),
+                label: 'Matches',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.auto_awesome_outlined),
+                activeIcon: Icon(Icons.auto_awesome),
+                label: 'Analysis',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.settings_outlined),
+                activeIcon: Icon(Icons.settings),
+                label: 'Settings',
+              ),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

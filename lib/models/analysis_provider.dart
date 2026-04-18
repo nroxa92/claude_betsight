@@ -2,13 +2,16 @@ import 'package:flutter/foundation.dart';
 
 import '../services/claude_service.dart';
 import '../services/storage_service.dart';
+import 'analysis_log.dart';
 import 'match.dart';
+import 'recommendation.dart';
 
 class AnalysisProvider extends ChangeNotifier {
   final ClaudeService _service;
   final List<ChatMessage> _messages = [];
   bool _isLoading = false;
   String? _error;
+  List<Match> _stagedMatches = [];
 
   AnalysisProvider({ClaudeService? service})
       : _service = service ?? ClaudeService() {
@@ -20,19 +23,47 @@ class AnalysisProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get hasApiKey => _service.hasApiKey;
+  List<Match> get stagedMatches => List.unmodifiable(_stagedMatches);
+  bool get hasStagedMatches => _stagedMatches.isNotEmpty;
+
+  void stageSelectedMatches(List<Match> matches) {
+    _stagedMatches = List.from(matches);
+    notifyListeners();
+  }
+
+  void clearStagedMatches() {
+    if (_stagedMatches.isEmpty) return;
+    _stagedMatches = [];
+    notifyListeners();
+  }
 
   static const _systemPrompt = '''
 You are BetSight AI, a sports betting intelligence assistant.
-Your job is to help users analyze matches, odds, and betting value
-across soccer, basketball, and tennis.
+Your job is to analyze matches, odds, and betting value across soccer, basketball, and tennis.
 
-Guidelines:
-- When match context is provided, use it directly in your analysis.
-- Calculate implied probability from decimal odds (1/odds) and compare to your own estimate.
-- Flag value bets where your estimate exceeds implied probability by a meaningful margin.
-- Use structured recommendation labels: **VALUE**, **WATCH**, **SKIP**.
-- Always mention bookmaker margin if it's unusually high (>8%).
-- This is not financial advice. Users must DYOR and gamble responsibly.
+## Analysis method
+
+When match context is provided, calculate implied probability from decimal odds (probability = 1/odds) for each outcome.
+Compare implied probability to your own estimate based on team form, head-to-head history, injuries, and recent news you may know about.
+A match has value when your estimate exceeds implied probability by a meaningful margin (at least 3 percentage points).
+
+Always mention bookmaker margin if it exceeds 8 percent (sign of a soft book).
+Always mention which specific outcome (home/draw/away) looks like value, not just "the match".
+
+## Output format
+
+Every response MUST end with exactly one of these three markers on its own line:
+
+**VALUE** — clear edge detected on a specific outcome, recommend a bet
+**WATCH** — interesting spot but edge is marginal or data is incomplete, monitor only
+**SKIP** — no edge, fair odds, or too uncertain
+
+Never combine markers. Never skip the marker. The marker must be on its own line as the last line of your response.
+
+## Constraints
+
+This is informational analysis, not financial advice. Users must do their own research and gamble responsibly.
+Never suggest loan-based betting, chasing losses, or increasing stakes after a loss.
 ''';
 
   Future<void> setApiKey(String key) async {
@@ -79,7 +110,11 @@ Guidelines:
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
-    final userContent = _buildUserMessage(trimmed, contextMatches);
+    final effectiveContext = contextMatches ??
+        (_stagedMatches.isNotEmpty ? _stagedMatches : null);
+    final usedStaged = contextMatches == null && _stagedMatches.isNotEmpty;
+
+    final userContent = _buildUserMessage(trimmed, effectiveContext);
     final userMessage = ChatMessage(role: 'user', content: userContent);
     _messages.add(userMessage);
     _isLoading = true;
@@ -94,6 +129,25 @@ Guidelines:
         systemPrompt: _systemPrompt,
       );
       _messages.add(ChatMessage(role: 'assistant', content: reply));
+
+      try {
+        final log = AnalysisLog(
+          id: generateUuid(),
+          timestamp: DateTime.now(),
+          userMessage: trimmed,
+          assistantResponse: reply,
+          contextMatchIds:
+              effectiveContext?.map((m) => m.id).toList() ?? const [],
+          recommendationType: parseRecommendationType(reply),
+        );
+        await StorageService.saveAnalysisLog(log);
+      } catch (e) {
+        debugPrint('Failed to save analysis log: $e');
+      }
+
+      if (usedStaged) {
+        _stagedMatches = [];
+      }
     } on ClaudeException catch (e) {
       _messages.removeLast();
       _error = e.message;

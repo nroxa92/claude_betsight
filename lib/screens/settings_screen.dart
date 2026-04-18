@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/analysis_provider.dart';
 import '../models/matches_provider.dart';
+import '../models/value_preset.dart';
 import '../theme/app_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -40,6 +41,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildAnthropicSection(),
           const SizedBox(height: 24),
           _buildOddsSection(),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 16),
+          _buildValuePresetSection(),
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 16),
@@ -138,6 +143,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildValuePresetSection() {
+    return Consumer<MatchesProvider>(
+      builder: (_, p, child) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.track_changes, color: AppTheme.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'Value Bets Filter',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            RadioGroup<ValuePreset>(
+              groupValue: p.valuePreset,
+              onChanged: (v) {
+                if (v != null) p.setValuePreset(v);
+              },
+              child: Column(
+                children: [
+                  for (final preset in ValuePreset.values)
+                    RadioListTile<ValuePreset>(
+                      value: preset,
+                      activeColor: AppTheme.primary,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        preset.display,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        preset.description,
+                        style: TextStyle(
+                            color: Colors.grey[400], fontSize: 12),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/analysis_provider.dart';
+import '../models/match.dart';
 import '../models/matches_provider.dart';
+import '../models/navigation_controller.dart';
 import '../widgets/match_card.dart';
 import '../widgets/sport_selector.dart';
 
@@ -12,10 +15,14 @@ class MatchesScreen extends StatefulWidget {
   State<MatchesScreen> createState() => _MatchesScreenState();
 }
 
-class _MatchesScreenState extends State<MatchesScreen> {
+class _MatchesScreenState extends State<MatchesScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this, initialIndex: 0);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<MatchesProvider>();
       if (p.hasApiKey) p.fetchMatches();
@@ -23,9 +30,34 @@ class _MatchesScreenState extends State<MatchesScreen> {
   }
 
   @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _goToAnalysisWithSelection(
+      BuildContext context, MatchesProvider matches) {
+    final selected = matches.selectedMatches;
+    if (selected.isEmpty) return;
+    context.read<AnalysisProvider>().stageSelectedMatches(selected);
+    context.read<NavigationController>().setTab(1);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('BetSight')),
+      floatingActionButton: Consumer<MatchesProvider>(
+        builder: (_, p, child) {
+          if (p.selectedCount == 0) return const SizedBox.shrink();
+          final n = p.selectedCount;
+          return FloatingActionButton.extended(
+            onPressed: () => _goToAnalysisWithSelection(context, p),
+            icon: const Icon(Icons.auto_awesome),
+            label: Text('Analyze $n match${n == 1 ? "" : "es"}'),
+          );
+        },
+      ),
       body: Column(
         children: [
           Padding(
@@ -37,31 +69,74 @@ class _MatchesScreenState extends State<MatchesScreen> {
               ),
             ),
           ),
+          TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: 'Value Bets'),
+              Tab(text: 'All Matches'),
+            ],
+          ),
           Expanded(
-            child: Consumer<MatchesProvider>(
-              builder: (_, p, child) {
-                if (!p.hasApiKey) return _buildNoApiKeyState();
-                if (p.isLoading && p.allMatches.isEmpty) {
-                  return _buildSkeletonList();
-                }
-                if (p.error != null && p.allMatches.isEmpty) {
-                  return _buildErrorState(p);
-                }
-                if (p.filteredMatches.isEmpty) {
-                  return _buildEmptyState();
-                }
-                return RefreshIndicator(
-                  onRefresh: p.fetchMatches,
-                  child: ListView.builder(
-                    itemCount: p.filteredMatches.length,
-                    itemBuilder: (_, i) =>
-                        MatchCard(match: p.filteredMatches[i]),
-                  ),
-                );
-              },
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildValueBetsTab(),
+                _buildAllMatchesTab(),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildValueBetsTab() {
+    return Consumer<MatchesProvider>(
+      builder: (_, p, child) {
+        if (!p.hasApiKey) return _buildNoApiKeyState();
+        if (p.isLoading && p.allMatches.isEmpty) {
+          return _buildSkeletonList();
+        }
+        if (p.error != null && p.allMatches.isEmpty) {
+          return _buildErrorState(p);
+        }
+        final list = p.valueBets;
+        if (list.isEmpty) return _buildEmptyValueState(p);
+        return _buildMatchList(p, list);
+      },
+    );
+  }
+
+  Widget _buildAllMatchesTab() {
+    return Consumer<MatchesProvider>(
+      builder: (_, p, child) {
+        if (!p.hasApiKey) return _buildNoApiKeyState();
+        if (p.isLoading && p.allMatches.isEmpty) {
+          return _buildSkeletonList();
+        }
+        if (p.error != null && p.allMatches.isEmpty) {
+          return _buildErrorState(p);
+        }
+        if (p.filteredMatches.isEmpty) return _buildEmptyAllState();
+        return _buildMatchList(p, p.filteredMatches);
+      },
+    );
+  }
+
+  Widget _buildMatchList(MatchesProvider p, List<Match> list) {
+    return RefreshIndicator(
+      onRefresh: p.fetchMatches,
+      child: ListView.builder(
+        itemCount: list.length,
+        itemBuilder: (_, i) {
+          final m = list[i];
+          return MatchCard(
+            match: m,
+            selectable: true,
+            isSelected: p.isMatchSelected(m.id),
+            onSelectionToggle: () => p.toggleMatchSelection(m.id),
+          );
+        },
       ),
     );
   }
@@ -124,7 +199,28 @@ class _MatchesScreenState extends State<MatchesScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyValueState(MatchesProvider p) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.tune, size: 64, color: Colors.grey[600]),
+            const SizedBox(height: 16),
+            Text(
+              'No value bets match current preset (${p.valuePreset.display}). '
+              'Try a different preset in Settings.',
+              style: TextStyle(color: Colors.grey[400]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyAllState() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:betsight/main.dart';
 import 'package:betsight/models/analysis_provider.dart';
 import 'package:betsight/models/matches_provider.dart';
+import 'package:betsight/models/navigation_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
@@ -11,6 +12,7 @@ import 'package:provider/provider.dart';
 Widget _wrap() {
   return MultiProvider(
     providers: [
+      ChangeNotifierProvider(create: (_) => NavigationController()),
       ChangeNotifierProvider(create: (_) => MatchesProvider()),
       ChangeNotifierProvider(create: (_) => AnalysisProvider()),
     ],

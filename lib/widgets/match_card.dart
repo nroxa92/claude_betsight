@@ -11,8 +11,18 @@ import 'odds_widget.dart';
 class MatchCard extends StatefulWidget {
   final Match match;
   final VoidCallback? onTap;
+  final bool selectable;
+  final bool isSelected;
+  final VoidCallback? onSelectionToggle;
 
-  const MatchCard({super.key, required this.match, this.onTap});
+  const MatchCard({
+    super.key,
+    required this.match,
+    this.onTap,
+    this.selectable = false,
+    this.isSelected = false,
+    this.onSelectionToggle,
+  });
 
   @override
   State<MatchCard> createState() => _MatchCardState();
@@ -53,7 +63,9 @@ class _MatchCardState extends State<MatchCard> {
 
     return Card(
       child: InkWell(
-        onTap: widget.onTap,
+        onTap: widget.selectable
+            ? widget.onSelectionToggle
+            : widget.onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -61,6 +73,21 @@ class _MatchCardState extends State<MatchCard> {
             children: [
               Row(
                 children: [
+                  if (widget.selectable)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: Checkbox(
+                          value: widget.isSelected,
+                          onChanged: (_) => widget.onSelectionToggle?.call(),
+                          activeColor: AppTheme.primary,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ),
                   Text(match.sport.icon, style: const TextStyle(fontSize: 16)),
                   const SizedBox(width: 8),
                   Text(

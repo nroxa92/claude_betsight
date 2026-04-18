@@ -93,6 +93,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         },
                       ),
               ),
+              if (p.hasStagedMatches) _buildStagedBar(p),
               if (p.error != null) _buildErrorBar(p),
               _buildInputBar(p),
             ],
@@ -164,6 +165,37 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStagedBar(AnalysisProvider p) {
+    final n = p.stagedMatches.length;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppTheme.primary.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_outline, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$n match${n == 1 ? "" : "es"} staged for next question',
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+          GestureDetector(
+            onTap: p.clearStagedMatches,
+            child: const Icon(Icons.close, size: 16),
+          ),
+        ],
       ),
     );
   }
