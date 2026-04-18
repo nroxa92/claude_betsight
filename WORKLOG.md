@@ -1277,6 +1277,98 @@
 - ~~MatchDetailScreen Charts tab ne pokriva tennis~~ — resolved with TennisInfoPanel (S9 Task 2)
 - ~~Material Accumulator name collision~~ — resolved with BetAccumulator rename (S9 Task 3)
 
+---
+---
+
+## Session 10: 2026-04-18 — Documentation Final
+
+**Kontekst:** S1-S9 izgradili kompletan BetSight kod (64 Dart fajla, verzija 3.1.1+10). Ali dokumentacija je bila doslovno default Flutter template ("A new Flutter project"). S10 zatvara taj jaz s 4 kljucna dokumentna fajla paralelna CoinSight-u: README.md (prvi dojam), NEWBIE_GUIDE.md (korak-po-korak za novog korisnika), MANUAL.md (feature reference), OVERVIEW.md (arhitekturalni dokument s session-by-session poviješću).
+
+---
+
+### Task 1 — README.md
+**Status:** Completed
+
+**Opis:** Profesionalni README s badges-ima (Flutter/Dart/License/Version/Platform), 3-tier tabelom, listom značajki (Intelligence Layer s 5 izvora, Betting & tracking, Charts, Push notifications, Detail screens), instalacija sekcija, konfiguracija s 6 API-ja tablicom, tehnicki stack tablica, dokumentacija links, proprietary license napomena. Hrvatski jezik. Analog CoinSight READMEu ali BetSight-specific sadrzaj.
+
+**Kreirani fajlovi:**
+- `README.md` — 154 linija (target ~150 ✓)
+
+**Verifikacija:** flutter analyze 0 issues, sadržaj ne sadrzi "A new Flutter project" (grep verified).
+
+---
+
+### Task 2 — NEWBIE_GUIDE.md
+**Status:** Completed
+
+**Opis:** 15 sekcija kroz korak-po-korak od Anthropic API registracije do prvog bet-a: (1) sto je BetSight, (2) prerequisiti, (3) Claude AI setup s detaljnim troubleshooting-om, (4) The Odds API postavljanje + 500 req/mj objasnjenje, (5) Football-Data.org (opcionalno) s podrzanim ligama, (6) Telegram Bot (opcionalno) s detaljnim objasnjenjem Bot API ogranicenja i practical workflow-om, (7) Reddit auto-konfiguracija, (8) prvi koraci i navigacija, (9) detaljan tier walkthrough (PRE-MATCH / LIVE / ACCUMULATOR), (10) prva Claude analiza s context injection objasnjenjem, (11) prvi bet + bankroll, (12) 3 grafikona (Odds Movement / Form / Equity Curve), (13) 50+ pojmova rjecnik, (14) zlatna pravila + responsible gambling resources, (15) zavrsna rijec. Hrvatski, svaki pojam objasnjen kad se prvi put spominje.
+
+**Kreirani fajlovi:**
+- `NEWBIE_GUIDE.md` — 1263 linije (target 1200-1400 ✓)
+
+**Verifikacija:** flutter analyze 0 issues.
+
+---
+
+### Task 3 — MANUAL.md
+**Status:** Completed
+
+**Opis:** 23 poglavlja korisnickog prirucnika za power-user-e. Razlika od NEWBIE_GUIDE: **NEWBIE je korak-po-korak za novog**, **MANUAL je reference za postojeceg** korisnika koji zeli detalje svake funkcionalnosti. Poglavlja: (1) sto je, (2) osnovni pojmovi, (3) Three-Tier Framework detaljno, (4) Intelligence Layer s scoring formulama po izvoru, (5-6) prvo pokretanje + turneja, (7) API kljucevi sazetak, (8) prva analiza, (9) kako citati Claude odgovor + Trade Action Bar + marker parser, (10-11) prvi bet + settlement, (12) bankroll + Kelly Criterion napomena, (13) accumulator strategija + correlation warnings, (14) Telegram Monitor s Bot API ogranicenjem obrazlozenje, (15) Intelligence Dashboard detaljno, (16) 4 charts + responsive sizing, (17) push notifikacije lifecycle, (18) Bot Manager, (19) tipicni scenariji (weekly routine, live, accumulator, after bad month), (20) problemi i rjesenja tablice, (21) sigurnost, (22) FAQ, (23) 50+ pojmova rjecnik.
+
+**Kreirani fajlovi:**
+- `MANUAL.md` — 1610 linija (target 1500-1800 ✓)
+
+**Verifikacija:** flutter analyze 0 issues.
+
+---
+
+### Task 4 — OVERVIEW.md
+**Status:** Completed
+
+**Opis:** Arhitekturalni dokument. Sekcije: (1) sto je BetSight, (2) stack + struktura fajlova + dependency graph + providers + 13 Hive boxova + 6 external APIs, (3-13) session-by-session povijest S1-S10 s kontekstom/ciljem/fajlovima/odlukama/rezultatom, (14) konacan pregled arhitekture (multi-source flow, tier strategy, cache management, Claude prompt design), (15) poznata ogranicenja i by-design odluke (Telegram, tennis coverage, Odds cap, responsive UI, Android-only, proprietary license, Accumulator rename, S1.x chronology), (16) notifications lifecycle detaljno, (17) Android build configuration (desugaring, manifest, namespace, signing), (18) testing strategija i preporuke, (19) performance napomene (rebuild triggers, memory, network calls), (20) zavrsna rijec.
+
+**Kreirani fajlovi:**
+- `OVERVIEW.md` — 1033 linije (target 1000-1200 ✓)
+
+**Verifikacija:** flutter analyze 0 issues.
+
+---
+
+### Task 5 — Pubspec Bump + WORKLOG Final + Verification
+**Status:** Completed
+
+**Opis:** Verzija bump na 3.1.2+11 (patch). WORKLOG dobio finalni unos s sazetkom svih 5 taskova. Pokrenute sve builds. APK kopiran u root. Sanity check: README ne sadrzi "A new Flutter project" (grep verified).
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows, flutter build apk --debug.
+
+**Ažurirani fajlovi:**
+- `pubspec.yaml` — version 3.1.2+11.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspjesan, flutter build apk --debug uspjesan, APK `betsight-v3.1.2.apk` (144 MB) u rootu.
+
+---
+
+### Finalna verifikacija Session 10:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build windows — uspjesan
+- flutter build apk --debug — uspjesan
+- APK u rootu: betsight-v3.1.2.apk (144 MB, NOT in git)
+- Verzija: **3.1.2+11** (patch bump — documentation only)
+- **Dokumentacija: 4 nova fajla ukupno ~4060 linija**
+  - README.md (154)
+  - NEWBIE_GUIDE.md (1263)
+  - MANUAL.md (1610)
+  - OVERVIEW.md (1033)
+- Git: Claude Code NE commit-a/push-a — developer preuzima
+
+**BetSight 3.1.2 status:**
+- 0 otvorenih bugova
+- 1 dokumentirano by-design ogranicenje (Telegram)
+- 64 Dart fajla (~11500 linija koda) + ~4060 linija dokumentacije
+- Feature parity s CoinSight-om za intelligence platform + dokumentacijski parity ostvaren
+- BetSight je zavrsio svoju "greenfield" fazu — spreman za real-world test
+
 *Backlog journey: S4 imao 1 → S5.5 ostao 1 → S6 dodao 3 (total 4) → S7 dodao 6 (total 10) → S8 riješio 7 (total 3) → S9 riješio 2 i re-klasificirao 1 (total 1 — by-design).*
 
 ---
