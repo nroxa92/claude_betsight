@@ -244,6 +244,17 @@
 
 ---
 
+### Finalna verifikacija Session 2:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build windows — uspješan
+- flutter build apk --debug — uspješan
+- APK u rootu: betsight-v1.1.0.apk (142M, NOT in git)
+- Verzija: 1.1.0+2
+- Git commit: 679a754
+
+---
+
 ## Identified Issues
 
 *No unresolved issues at this time.*
