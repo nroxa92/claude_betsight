@@ -1,7 +1,7 @@
 name: betsight
 description: "AI-powered sports betting intelligence platform."
 publish_to: 'none'
-version: 3.1.2+11
+version: 3.1.3+12
 
 environment:
   sdk: ^3.11.0

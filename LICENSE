@@ -1,39 +1,139 @@
-PROPRIETARY SOFTWARE LICENSE
+BetSight — Proprietary Software License
+==========================================
 
-Copyright (c) 2026 BetSight. All rights reserved.
+Copyright (c) 2026 Neven Roksa. All Rights Reserved.
 
-This software and associated documentation files (the "Software") are the
-confidential and proprietary information of BetSight ("Owner"). The Software
-is provided under the following restrictions:
+This repository ("the Software") is published publicly for demonstration,
+portfolio, and transparency purposes ONLY. Public visibility does NOT grant
+any license, right, or permission to use, copy, or reuse the Software or any
+part of it.
 
-1. NO COPY. You may not copy, reproduce, or duplicate the Software, in whole
-   or in part, by any means or in any form.
+---------------------------------------------------------------
+1. GRANT OF RIGHTS
+---------------------------------------------------------------
 
-2. NO MODIFICATION. You may not modify, adapt, alter, translate, or create
-   derivative works of the Software.
+No rights are granted. All rights — including but not limited to copyright,
+database rights, trade secret protections, moral rights, and any sui generis
+rights — are fully reserved by the copyright holder (Neven Roksa).
 
-3. NO DISTRIBUTION. You may not sublicense, sell, rent, lease, lend, or
-   otherwise distribute the Software to any third party.
+You are permitted to:
 
-4. NO REVERSE ENGINEERING. You may not reverse engineer, decompile,
-   disassemble, or otherwise attempt to derive the source code, structure,
-   or algorithms of the Software.
+  (a) View the source code through the hosting platform's web interface.
+  (b) Reference the project by name and link back to the original repository
+      for commentary, criticism, review, or news reporting (fair use).
 
-5. NO TRANSFER. You may not assign or transfer your rights or obligations
-   under this license without the prior written consent of the Owner.
+You are NOT permitted to:
 
-CONFIDENTIALITY. The Software contains trade secrets and confidential
-information of the Owner. You agree to maintain the confidentiality of the
-Software and not to disclose it to any third party without prior written
-authorization from the Owner.
+  (a) Copy, clone, fork, download, mirror, or otherwise reproduce the
+      Software or any portion of it, except as strictly necessary for the
+      hosting platform's own caching and delivery.
+  (b) Use the Software, in whole or in part, in any product, service,
+      application, library, research, dataset, model training corpus,
+      or derivative work, whether commercial or non-commercial.
+  (c) Modify, adapt, translate, port, or create derivative works.
+  (d) Distribute, sublicense, sell, rent, lease, or otherwise transfer
+      the Software to any third party.
+  (e) Reverse-engineer, decompile, disassemble, or otherwise attempt to
+      derive the source form of any compiled artifact (including the APK).
+  (f) Remove, obscure, or alter any copyright, trademark, or attribution
+      notice.
 
-DISCLAIMER. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
-EVENT SHALL THE OWNER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
-WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF, OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+---------------------------------------------------------------
+2. PROTECTION OF FUNCTIONAL LOGIC  (EXPRESSLY EMPHASIZED)
+---------------------------------------------------------------
 
-TERMINATION. This license automatically terminates upon any breach of its
-terms. Upon termination, you must cease all use of the Software and destroy
-all copies in your possession.
+The functional logic of the Software — including but not limited to:
+
+  - the three-tier investment architecture (PRE-MATCH / LIVE / ACCUMULATOR),
+  - the multi-source intelligence aggregation methodology and the
+    confluence-score calculation (0–6.0 scale across Odds, Football-Data,
+    BallDontLie NBA, Reddit, and Telegram sources),
+  - the odds drift detection and sharp-money-signal heuristics,
+  - the Claude-AI system prompts, analysis framing, tier-aware chat
+    behaviors, and VALUE/WATCH/SKIP recommendation markers,
+  - the accumulator correlation-detection logic and combined-odds
+    calculation,
+  - the bet tracking model, P&L analytics, equity-curve construction,
+    per-sport breakdown formulas, and filter/search implementation,
+  - the Hive schema and local persistence layout,
+  - the MonitoredChannel reliability-scoring algorithm (Novo/Niska/
+    Srednja/Visoka labels and weighting factors),
+  - the combination, orchestration, and interaction of the above,
+
+constitutes original intellectual work of the copyright holder and is
+protected as copyrightable expression AND as trade secret / know-how.
+Reimplementation of the above logic in a different programming language,
+framework, or architecture — with the intent to reproduce the behavior,
+capabilities, or competitive advantage of BetSight — is expressly
+FORBIDDEN and will be treated as infringement of this license and, where
+applicable, as misappropriation of trade secrets.
+
+Reading the source code does NOT grant you the right to reimplement what
+you have read.
+
+---------------------------------------------------------------
+3. AI / MACHINE-LEARNING RESTRICTIONS
+---------------------------------------------------------------
+
+The Software may not be used, in whole or in part, as training data,
+fine-tuning data, retrieval corpus, evaluation set, or any other input
+to machine-learning or artificial-intelligence systems, whether for
+commercial or research purposes, without prior written permission from
+the copyright holder.
+
+---------------------------------------------------------------
+4. NO WARRANTY
+---------------------------------------------------------------
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. SPORTS BETTING
+CARRIES SUBSTANTIAL RISK OF LOSS; THE SOFTWARE IS AN EXPERIMENTAL TOOL
+AND IS NOT FINANCIAL, INVESTMENT, TAX, OR LEGAL ADVICE.
+
+---------------------------------------------------------------
+5. LIMITATION OF LIABILITY
+---------------------------------------------------------------
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES,
+OR OTHER LIABILITY — WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE
+— ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE, ITS USE, ITS
+INABILITY TO BE USED, OR ANY BETTING DECISIONS INFORMED BY IT. THIS
+INCLUDES, WITHOUT LIMITATION, DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+CONSEQUENTIAL, AND PUNITIVE DAMAGES, LOST PROFITS, AND LOST FUNDS OR
+BETTING STAKES.
+
+---------------------------------------------------------------
+6. ENFORCEMENT & TERMINATION
+---------------------------------------------------------------
+
+Any violation of this license automatically and immediately terminates
+any permissions you may have been granted, and obligates you to destroy
+all copies of the Software in your possession or control.
+
+The copyright holder reserves the right to enforce this license to the
+fullest extent permitted under applicable copyright law, trade-secret
+law, and unfair-competition law, including seeking injunctive relief,
+damages, and legal costs.
+
+---------------------------------------------------------------
+7. GOVERNING LAW
+---------------------------------------------------------------
+
+This license is governed by the laws of the Republic of Croatia and,
+where applicable, the copyright and intellectual-property law of the
+European Union. Any dispute arising from this license shall be resolved
+exclusively by the competent courts of the Republic of Croatia.
+
+---------------------------------------------------------------
+8. CONTACT
+---------------------------------------------------------------
+
+For licensing inquiries, commercial use requests, or permission requests,
+contact the copyright holder at: nevenroksa@gmail.com
+
+---------------------------------------------------------------
+
+If you do not agree to ALL of the terms above, you have NO permission to
+use this Software in any way, and you must not download or retain any
+copy of it.

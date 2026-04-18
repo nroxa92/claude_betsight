@@ -1369,6 +1369,136 @@
 - Feature parity s CoinSight-om za intelligence platform + dokumentacijski parity ostvaren
 - BetSight je zavrsio svoju "greenfield" fazu — spreman za real-world test
 
+---
+---
+
+## Session 10.5 HYGIENE: 2026-04-18 — Repository Hygiene (CoinSight 1:1 Parity)
+
+**Kontekst:** S10 je zavrsio dokumentaciju, ali audit je otkrio 6 znacajnih inconsistency-ja u odnosu na CoinSight-ovu strukturu repozitorija: SESSION fajlovi committed, platformski direktoriji (iOS/linux/macos/windows/web) committed iako je projekt Android-only, .gitignore nepotpun, generic LICENSE, CLAUDE.md zastario od S1, testna struktura nepostojeca. S10.5 rjesava sve to u 7 fokusiranih zadataka. Patch bump na 3.1.3+12. Nema novog Dart koda — samo repositorijska higijena.
+
+---
+
+### Task 1 — Update .gitignore + pubspec bump
+**Status:** Completed
+
+**Opis:** pubspec version na 3.1.3+12. `.gitignore` kompletno prepisana prema CoinSight predlošku — proširena s 40 na 87 linija. Dodane sekcije: Android signing (jks/keystore/key.properties), secrets (secret/pem/p12), Hive database, platformski dirs (ios/linux/macos/windows/web), SESSION_*.md pattern, archive + temp.
+
+**Komande izvrsene:** flutter analyze, flutter build windows (zadnji put prije Task 2 destroys windows/).
+
+**Azurirani fajlovi:**
+- `pubspec.yaml` — version 3.1.3+12.
+- `.gitignore` — 87 linija (bilo 40).
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspjesan (posljednji).
+
+---
+
+### Task 2 — Ukloni platformske direktorije (Android-only)
+**Status:** Completed
+
+**Opis:** `git rm -rf` + `rm -rf` za 5 platformskih direktorija (iOS, linux, macOS, Windows, web). BetSight je Android-only — ostali targets nisu u scope-u i commitani su kao ostatak iz `flutter create` templatea. Ukupno ~100 fajlova uklonjeno iz git tracking-a + obrisano iz filesystema.
+
+**Komande izvrsene:** git rm -rf (5 dirs), rm -rf (empty remnants), flutter pub get, flutter analyze, flutter build apk --debug.
+
+**Obrisani direktoriji:**
+- `ios/` — iOS Runner, Swift, Podfile
+- `linux/` — GTK+ runner (C++)
+- `macos/` — Swift + entitlements
+- `windows/` — Win32 runner (C++)
+- `web/` — HTML/JS wrapper, manifest, icons
+
+**Verifikacija:** flutter analyze 0 issues, flutter build apk --debug uspjesan. Windows build preskocen — dir je obrisan.
+
+---
+
+### Task 3 — Ukloni SESSION_*.md + BETLOG iz git tracking-a
+**Status:** Completed
+
+**Opis:** Internal dev planning fajlovi (SESSION_1.md kroz SESSION_10.md + SESSION_5_5_FIX.md + BETLOG.md) uklonjeni iz git tracking-a kroz `git rm --cached`. Fajlovi i dalje postoje u filesystemu za lokalnu developer referencu — samo ne idu u repo. `.gitignore` pattern `SESSION_*.md` i `BETLOG.md` (iz T1) drzi ih trajno untracked.
+
+**Komande izvrsene:** git rm --cached (12 fajlova), flutter analyze.
+
+**Ukloneni iz tracking-a:**
+- SESSION_1.md - SESSION_10.md (11 fajlova)
+- SESSION_5_5_FIX.md
+- BETLOG.md
+
+**Verifikacija:** 13 fajlova ostaje u filesystemu (ukljucujuci SESSION_10_5_HYGIENE.md). git ls-files nema SESSION_/BETLOG pattern. flutter analyze 0 issues.
+
+---
+
+### Task 4 — Ukloni .metadata iz git tracking-a
+**Status:** Completed
+
+**Opis:** `.metadata` je Flutter internal state fajl (track-a last revision Flutter-a koja je inicjalizirala projekt) — ne treba biti u git-u. Uklonjen iz tracking-a kroz `git rm --cached`. Fajl ostaje u filesystemu za Flutter tool-e.
+
+**Komande izvrsene:** git rm --cached .metadata.
+
+**Verifikacija:** fajl postoji u filesystemu (1706 bytes, Apr 18 10:25). git ls-files ga vise ne sadrzi. flutter analyze 0 issues.
+
+---
+
+### Task 5 — LICENSE replacement (Neven Roksa proprietary)
+**Status:** Completed
+
+**Opis:** Generic "BetSight" LICENSE (39 linija, placeholder) zamijenjen s punim Neven Roksa proprietary license-om (139 linija) analognim CoinSight-u, ali s BetSight-specific sport betting adaptacijama. 8 sekcija: Grant of Rights, Protection of Functional Logic (eksplicitno opisuje three-tier, confluence scoring, drift detection, Claude prompts, accumulator logic, Hive schema, MonitoredChannel reliability), AI/ML restrictions, No Warranty, Limitation of Liability (ukljucuje lost betting stakes), Enforcement, Governing Law (Hrvatska + EU), Contact (nevenroksa@gmail.com).
+
+**Komande izvrsene:** rm LICENSE, Write novi LICENSE, flutter analyze.
+
+**Azurirani fajlovi:**
+- `LICENSE` — 139 linija (bilo 39).
+
+**Verifikacija:** head -5 LICENSE pokazuje "Copyright (c) 2026 Neven Roksa". flutter analyze 0 issues.
+
+---
+
+### Task 6 — Update CLAUDE.md (S1-S10 parity)
+**Stajnost:** Completed
+
+**Opis:** CLAUDE.md je bio iz S1 (lista osnovna: Coin, CoinPosition... pogresno crypto lista) — nije reflektirao ni jednu BetSight feature od S2 nadalje. Prepisan od nule — sada pokriva: identitet/pravila rada, potpunu arhitekturu (lib/ models/screens/services/widgets/theme), svih 6 API integracija, 13 Hive boxova, 8 providera, Intelligence Layer (5 izvora weight mapping), Three-Tier Framework, redoslijed implementacije, WORKLOG format, git workflow.
+
+**Komande izvrsene:** rm CLAUDE.md, Write novi, grep verification, flutter analyze.
+
+**Azurirani fajlovi:**
+- `CLAUDE.md` — 89 linija (bilo ~30).
+
+**Verifikacija:** grep pronalazi "Intelligence Layer" i "Three-Tier" (2 matcha). flutter analyze 0 issues.
+
+---
+
+### Task 7 — Test direktorij strukturiranje + Final Verification
+**Status:** Completed
+
+**Opis:** Test/ proširen s 4 nova placeholder direktorija (helpers, unit, widget, integration) za buduce testne sesije. Kreiran `test/README.md` koji dokumentira strukturu, trenutno stanje (2/2 passed), i TODO listu konkretnih testova koje treba pisati (unit za OddsDrift.compute, parseRecommendationType, BetAccumulator.correlationWarnings itd; widget za MatchCard, TradeActionBar, BetsFilterBar; integration za full user flow).
+
+**Komande izvrsene:** mkdir -p (4 subdirs), Write test/README.md, flutter analyze, flutter test, flutter build apk --debug.
+
+**Kreirani fajlovi:**
+- `test/README.md` — dokumentira test strukturu + TODO.
+- `test/helpers/` (prazan, placeholder)
+- `test/unit/` (prazan)
+- `test/widget/` (prazan)
+- `test/integration/` (prazan)
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build apk --debug uspjesan.
+
+---
+
+### Finalna verifikacija Session 10.5:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build apk --debug — uspjesan
+- APK u rootu: betsight-v3.1.3.apk (145 MB, NOT in git)
+- Verzija: **3.1.3+12** (patch bump — repository hygiene)
+- **Repozitorij cleanup rezultat:**
+  - 116 fajlova uklonjenih iz git tracking-a (platformski + SESSION + BETLOG + .metadata)
+  - .gitignore proširena s 40 na 87 linija
+  - LICENSE prepisana (39 → 139 linija, Neven Roksa proprietary)
+  - CLAUDE.md azuriran (~30 → 89 linija)
+  - test/ strukturirana (4 subdir + README)
+- Git: Claude Code je izvrsio `git rm` komande za pripremu — developer preuzima commit/push
+- **BetSight repozitorij sada ima 1:1 strukturu s CoinSight-om**
+
 *Backlog journey: S4 imao 1 → S5.5 ostao 1 → S6 dodao 3 (total 4) → S7 dodao 6 (total 10) → S8 riješio 7 (total 3) → S9 riješio 2 i re-klasificirao 1 (total 1 — by-design).*
 
 ---
