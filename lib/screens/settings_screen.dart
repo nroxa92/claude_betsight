@@ -10,6 +10,7 @@ import '../models/value_preset.dart';
 import '../services/storage_service.dart';
 import '../services/telegram_monitor.dart';
 import '../theme/app_theme.dart';
+import 'bot_manager_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -616,7 +617,6 @@ class _TelegramSection extends StatefulWidget {
 
 class _TelegramSectionState extends State<_TelegramSection> {
   final TextEditingController _tokenCtrl = TextEditingController();
-  final TextEditingController _channelCtrl = TextEditingController();
   bool _showToken = false;
   bool _initialized = false;
   bool _testing = false;
@@ -624,7 +624,6 @@ class _TelegramSectionState extends State<_TelegramSection> {
   @override
   void dispose() {
     _tokenCtrl.dispose();
-    _channelCtrl.dispose();
     super.dispose();
   }
 
@@ -692,22 +691,6 @@ class _TelegramSectionState extends State<_TelegramSection> {
     } finally {
       if (mounted) setState(() => _testing = false);
     }
-  }
-
-  Future<void> _addChannel() async {
-    var input = _channelCtrl.text.trim();
-    if (input.isEmpty) return;
-    if (!input.startsWith('@')) input = '@$input';
-    if (input.length < 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Channel handle must be at least 4 characters'),
-        ),
-      );
-      return;
-    }
-    await context.read<TelegramProvider>().addChannel(input);
-    setState(() => _channelCtrl.clear());
   }
 
   @override
@@ -784,48 +767,16 @@ class _TelegramSectionState extends State<_TelegramSection> {
           ],
         ),
         const SizedBox(height: 16),
-        Text(
-          'Monitored channels',
-          style: TextStyle(color: Colors.grey[400], fontSize: 13),
-        ),
-        const SizedBox(height: 8),
-        if (p.monitoredChannels.isEmpty)
-          Text(
-            'No channels added yet — add @username below.',
-            style: TextStyle(color: Colors.grey[500], fontSize: 12),
-          )
-        else
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: [
-              for (final ch in p.monitoredChannels)
-                InputChip(
-                  label: Text(ch),
-                  deleteIcon: const Icon(Icons.close, size: 16),
-                  onDeleted: () => p.removeChannel(ch),
-                ),
-            ],
-          ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _channelCtrl,
-                decoration: const InputDecoration(
-                  hintText: '@channelhandle',
-                ),
-                onSubmitted: (_) => _addChannel(),
+        OutlinedButton.icon(
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const BotManagerScreen(),
               ),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: _addChannel,
-              icon: const Icon(Icons.add),
-              label: const Text('Add'),
-            ),
-          ],
+            );
+          },
+          icon: const Icon(Icons.tune),
+          label: Text('Manage Channels (${p.channels.length})'),
         ),
         const SizedBox(height: 12),
         SwitchListTile(

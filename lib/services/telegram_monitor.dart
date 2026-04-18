@@ -119,7 +119,6 @@ class TelegramMonitor {
     final lowerText = text.toLowerCase();
     final isRelevant =
         _relevanceKeywords.any((kw) => lowerText.contains(kw));
-    if (!isRelevant) return null;
 
     Sport? detectedSport;
     String? detectedLeague;
@@ -146,7 +145,7 @@ class TelegramMonitor {
       receivedAt: DateTime.now(),
       detectedSport: detectedSport,
       detectedLeague: detectedLeague,
-      isRelevant: true,
+      isRelevant: isRelevant,
     );
   }
 

@@ -2,13 +2,14 @@ import 'package:flutter/foundation.dart';
 
 import '../services/storage_service.dart';
 import '../services/telegram_monitor.dart';
+import 'monitored_channel.dart';
 import 'sport.dart';
 import 'tipster_signal.dart';
 
 class TelegramProvider extends ChangeNotifier {
   final TelegramMonitor _monitor;
   List<TipsterSignal> _signals = [];
-  List<String> _monitoredChannels = [];
+  List<MonitoredChannel> _channels = [];
   bool _enabled = false;
   String? _error;
 
@@ -17,14 +18,24 @@ class TelegramProvider extends ChangeNotifier {
     _monitor.onSignalReceived = _handleNewSignal;
 
     _signals = StorageService.getAllSignals();
-    _monitoredChannels = StorageService.getMonitoredChannels();
     _enabled = StorageService.getTelegramEnabled();
+    _bootstrapChannels();
 
     final token = StorageService.getTelegramToken();
     if (token != null && token.isNotEmpty) {
       _monitor.setBotToken(token);
       if (_enabled) _monitor.startMonitoring();
     }
+  }
+
+  Future<void> _bootstrapChannels() async {
+    try {
+      await StorageService.migrateMonitoredChannels();
+    } catch (_) {
+      // best-effort migration
+    }
+    _channels = StorageService.getAllMonitoredChannels();
+    notifyListeners();
   }
 
   List<TipsterSignal> get signals => List.unmodifiable(_signals);
@@ -39,7 +50,9 @@ class TelegramProvider extends ChangeNotifier {
     return recentSignals.where((s) => s.detectedSport == sport).toList();
   }
 
-  List<String> get monitoredChannels => List.unmodifiable(_monitoredChannels);
+  List<MonitoredChannel> get channels => List.unmodifiable(_channels);
+  List<String> get channelUsernames =>
+      _channels.map((c) => c.username).toList();
   bool get enabled => _enabled;
   bool get hasToken => _monitor.hasToken;
   bool get isMonitoring => _monitor.isMonitoring;
@@ -60,18 +73,19 @@ class TelegramProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addChannel(String channel) async {
-    final clean = channel.trim();
-    if (clean.isEmpty || _monitoredChannels.contains(clean)) return;
-    _monitoredChannels = [..._monitoredChannels, clean];
-    await StorageService.saveMonitoredChannels(_monitoredChannels);
+  Future<void> addChannel(String username) async {
+    final clean = username.trim();
+    if (clean.isEmpty || _channels.any((c) => c.username == clean)) return;
+    final channel =
+        MonitoredChannel(username: clean, addedAt: DateTime.now());
+    _channels = [..._channels, channel];
+    await StorageService.saveMonitoredChannel(channel);
     notifyListeners();
   }
 
-  Future<void> removeChannel(String channel) async {
-    _monitoredChannels =
-        _monitoredChannels.where((c) => c != channel).toList();
-    await StorageService.saveMonitoredChannels(_monitoredChannels);
+  Future<void> removeChannel(String username) async {
+    _channels = _channels.where((c) => c.username != username).toList();
+    await StorageService.deleteMonitoredChannel(username);
     notifyListeners();
   }
 
@@ -118,8 +132,26 @@ class TelegramProvider extends ChangeNotifier {
         s.channelUsername == signal.channelUsername);
     if (exists) return;
 
-    if (_monitoredChannels.isNotEmpty &&
-        !_monitoredChannels.contains(signal.channelUsername)) {
+    final now = DateTime.now();
+    final idx =
+        _channels.indexWhere((c) => c.username == signal.channelUsername);
+    if (idx != -1) {
+      final old = _channels[idx];
+      final updated = old.copyWith(
+        title: old.title ?? signal.channelTitle,
+        signalsReceived: old.signalsReceived + 1,
+        signalsRelevant:
+            old.signalsRelevant + (signal.isRelevant ? 1 : 0),
+        lastSignalAt: now,
+        lastRelevantAt: signal.isRelevant ? now : old.lastRelevantAt,
+      );
+      _channels[idx] = updated;
+      StorageService.saveMonitoredChannel(updated);
+    }
+
+    if (_channels.isNotEmpty && idx == -1) return;
+    if (!signal.isRelevant) {
+      if (idx != -1) notifyListeners();
       return;
     }
 

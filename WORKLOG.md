@@ -586,6 +586,116 @@
 
 ---
 
+---
+---
+
+## Session 5.5 FIX: 2026-04-18 — Prompt Redesign + Trade Action Bar + Bot Manager + Context Enhancements
+
+**Kontekst:** S1–S5 izgradili stabilan feature set sa solidnom infrastrukturom, ali kvaliteta UX-a u ključnim dodirnim točkama nije bila na CoinSight razini. S5.5 FIX podiže prompt s generic S1-level teksta na strukturirani 40-line engleski (analogno CoinSight S2 + S6), zamjenjuje usamljeni "Log Bet" button s Trade Action Bar-om (CoinSight S3 Faza F), dodaje MonitoredChannel model s reliability scoring-om i zasebni Bot Manager screen (CoinSight S5), te proširuje Claude context s [BETTING HISTORY] i [ODDS DRIFT] blokovima.
+
+---
+
+### Task 1 — Prompt Redesign
+**Status:** Completed
+
+**Opis:** Generic S1-level system prompt zamijenjen strukturiranim 40-line engleskim promptom s 5 sekcija: User profile (skip basic explanations), Objective 1 (odds analysis flow s margin/value), Objective 2 (kontekst — SELECTED MATCHES + TIPSTER SIGNALS + BETTING HISTORY), Objective 3 (recommendation s VALUE/WATCH/SKIP gdje VALUE mora navesti WHICH outcome / WHICH odds / probability vs implied / concrete next step), Constraints (no chasing, percentage stakes), Language (mirror user, sport terms in EN). `[SELECTED MATCHES]` blok dobio konzistentni format `{league}: {home} vs {away} | kickoff {ISO} | odds H/D/A: x/y/z | bookmaker {name}` i closing `[/SELECTED MATCHES]` tag. Kreiran BETLOG.md template za ručno bilježenje ishoda Claude preporuka (calibration).
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `BETLOG.md` — root-level dokumentacijski template (analogno CoinSight CHATLOG); tablica Date/Match/Claude call/My decision/Actual outcome/Notes + sekcija za calibration notes.
+
+**Ažurirani fajlovi:**
+- `pubspec.yaml` — version bump na `1.3.2+6`.
+- `lib/models/analysis_provider.dart` — `_systemPrompt` zamijenjen 40-line strukturiranim verzijom; `_buildUserMessage` SELECTED MATCHES blok prepravljen u novi format s closing tagom (kickoff prije odds, bookmaker uvijek vidljiv, odds H/A za sportove bez draw-a).
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 2 — Trade Action Bar
+**Status:** Completed
+
+**Opis:** Usamljeni "Log this as a bet" OutlinedButton (S3 Task 3) zamijenjen TradeActionBar widgetom — pojavljuje se ispod ZADNJE assistant ChatBubble-a kad parseRecommendationType vrati VALUE i postoji `lastLogId` u providera. Tri akcije: LOG BET (zelena ElevatedButton, otvara BetEntrySheet s prefilled stagedMatch.first + bilježi UserFeedback.logged), SKIP (OutlinedButton, bilježi UserFeedback.skipped + SnackBar "logged for calibration"), ASK MORE (OutlinedButton, bilježi UserFeedback.askedMore + setira inputPrefill koji TextField pickup-a kroz listener). AnalysisLog proširen s `userFeedback`/`feedbackAt` poljima i copyWith metodom. AnalysisProvider drži `_lastLogId`/`_inputPrefill` + `recordFeedback`/`setInputPrefill`/`clearInputPrefill`. Storage dobiva `updateAnalysisLogFeedback` + `getLogsByRecommendation` + `getFeedbackStats` (potencijalna podloga za buduću prompt kalibraciju).
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/widgets/trade_action_bar.dart` — TradeActionBar StatelessWidget; light-green styled Container s flag iconom + "VALUE signal detected" header; Row s 3 buttona i njihovim handlerima; svaki handler poziva `recordFeedback` na provideru i radi specifičnu UI akciju (sheet / SnackBar / inputPrefill).
+
+**Ažurirani fajlovi:**
+- `lib/models/analysis_log.dart` — dodan `UserFeedback` enum (none/logged/skipped/askedMore) + nova polja `userFeedback`/`feedbackAt` u AnalysisLog + `copyWith` metoda; toMap/fromMap proširen s default fallbackom na `UserFeedback.none`.
+- `lib/services/storage_service.dart` — uvozi recommendation; `updateAnalysisLogFeedback` (čita-update-spremi), `getLogsByRecommendation`, `getFeedbackStats` (Map<RecommendationType, Map<UserFeedback, int>>).
+- `lib/models/analysis_provider.dart` — polja `_lastLogId`/`_inputPrefill` + getteri + `setInputPrefill`/`clearInputPrefill`/`recordFeedback` metode; `sendMessage` postavlja `_lastLogId = log.id` prije save-a.
+- `lib/screens/analysis_screen.dart` — uvozi trade_action_bar (uklonjen direct bet_entry_sheet import jer ide kroz TradeActionBar); dodan `_inputFocus` FocusNode + `_listenedProvider` + `didChangeDependencies` listener registry + `_handlePrefill` callback (popuni controller + focus + clear); itemBuilder zamijenjen — `_buildLogBetButton` helper uklonjen, sad renderira TradeActionBar samo za zadnju VALUE poruku; TextField vezan na `_inputFocus`.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan.
+
+---
+
+### Task 3 — MonitoredChannel Model + Reliability Scoring
+**Status:** Completed
+
+**Opis:** Lista `List<String>` u TelegramProvider-u zamijenjena s `List<MonitoredChannel>` objektima. MonitoredChannel drži per-channel signalsReceived/signalsRelevant + timestamp-ove + reliability getter (-1 < 10 signala = "Novo", < 0.1 ratio = "Niska", < 0.3 = "Srednja", inače "Visoka") + colorValue za UI badge. Novi Hive box `monitored_channels_detail` (key = username). Migration helper migrira legacy `List<String>` iz settings boxa pri prvom pokretanju (no-op ako je novi box već popunjen). TelegramMonitor._parseUpdate sada uvijek vraća TipsterSignal s `isRelevant` flag-om (true/false) — više nije null za irrelevant — kako bi provider mogao ažurirati statistike. Provider._handleNewSignal: dedup → update channel stats (uvijek ako je kanal monitored) → skip save signal-a ako kanal nije monitored ili ako signal nije relevant (ali stats su već persisted). Settings screen privremeno koristi novi `channels` getter u InputChip listi (Task 4 zamjenjuje s Manage Channels button-om).
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/models/monitored_channel.dart` — MonitoredChannel klasa s reliability score/label/color getterima + lastRelevantDisplay (relativni time) + copyWith + toMap/fromMap.
+
+**Ažurirani fajlovi:**
+- `lib/services/storage_service.dart` — uvozi MonitoredChannel; dodan `_channelsDetailBox` constant; `init()` otvara sedmi box; `_channelsBox` getter; `getAllMonitoredChannels` (sort addedAt asc, skip malformed) /`saveMonitoredChannel` (key = username) /`deleteMonitoredChannel`; `migrateMonitoredChannels` helper (idempotent, no-op ako je box non-empty).
+- `lib/services/telegram_monitor.dart` — `_parseUpdate` više ne vraća null za irrelevant signale; uvijek vraća signal s `isRelevant: isRelevant` flagom.
+- `lib/models/telegram_provider.dart` — kompletno prepravljen: `_channels` lista MonitoredChannel-a; konstruktor poziva `_bootstrapChannels` (async migration + load + notify); novi `channels`/`channelUsernames` getteri; `addChannel`/`removeChannel` rade s MonitoredChannel objektima; `_handleNewSignal` ažurira stats (signalsReceived++ uvijek, signalsRelevant++ samo za relevant, lastRelevantAt samo za relevant) i samo persist-a relevant signale.
+- `lib/screens/settings_screen.dart` — InputChip listing prilagoden novom `channels`/`channel.username` API-ju (privremeni; Task 4 zamjenjuje cijeli ovaj blok).
+- `test/widget_test.dart` — setUpAll otvara `monitored_channels_detail` Hive box.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan.
+
+---
+
+### Task 4 — Bot Manager Screen
+**Status:** Completed
+
+**Opis:** Zasebni full-screen route (push iz Settings, ne IndexedStack tab) za upravljanje Telegram kanalima. Top stats header s 3 brojke (Channels / Total signals / Relevant), input red s TextField + Add buttonom (auto-prepend `@`, min 5 char validacija), ListView per-channel kartica. Svaka `_ChannelCard` prikazuje title (ako preuzet iz signala) + username + reliability badge (boja po threshold-u: grey/red/orange/green) + close ikona za delete s confirm dialog-om + meta chips (received/relevant/last). Settings _TelegramSection sad ima samo "Manage Channels (N)" OutlinedButton koji push-a BotManagerScreen — uklonjen inline channel input + chip listing iz Telegram sekcije.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/screens/bot_manager_screen.dart` — BotManagerScreen StatefulWidget; `_BotManagerScreenState` (controller za new channel input + helpers `_addChannel`/`_confirmDelete`/`_buildEmptyState`/`_statTile`); privatne klase `_ChannelCard` i `_ReliabilityBadge` (Color konvertira reliabilityColorValue int).
+
+**Ažurirani fajlovi:**
+- `lib/screens/settings_screen.dart` — uvozi BotManagerScreen; uklonjeni `_channelCtrl` field + `_addChannel` metoda + inline Wrap chip listing + Add button row; zamijenjeni s jednim "Manage Channels (N)" OutlinedButton.icon.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 5 — Context Injection Enhancements
+**Status:** Completed
+
+**Opis:** `_buildUserMessage` prepravljen na named arguments signature s 4 opcionalna konteksta (matches/signals/bettingHistory/driftByMatchId). Novi `[BETTING HISTORY — last N bets]` blok lista do 5 najnovijih user-ovih bet-ova (datum YYYY-MM-DD | sport | teams | pick @ odds | stake | outcome string). Novi `[ODDS DRIFT]` se ne renderira kao zaseban blok već kao **inline** linija ispod svakog matcha u SELECTED MATCHES bloku — `  [drift] {Side} ±X.X% since last snapshot` — samo kad je hasSignificantMove true. `sendMessage` prikuplja oba dodatna konteksta direktno iz Storage (decoupled od BetsProvider): `getAllBets().take(5)` i `getSnapshotsForMatch(id)` per-staged-match → OddsDrift.compute. Svi blokovi su opcionalni i izostaju kad nema podataka.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows, flutter build apk --debug.
+
+**Ažurirani fajlovi:**
+- `lib/models/analysis_provider.dart` — uvozi bet/odds_snapshot/sport; `_buildUserMessage` signature → named args (text + 4 named); BETTING HISTORY blok s closing tagom; ODDS DRIFT inline u SELECTED MATCHES; `sendMessage` skuplja history (sort placedAt desc, take 5) i drifts (per-match snapshot lookup) prije poziva `_buildUserMessage`.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan, flutter build apk --debug uspješan.
+
+---
+
+### Finalna verifikacija Session 5.5:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build windows — uspješan
+- flutter build apk --debug — uspješan
+- APK u rootu: betsight-v1.3.2.apk (NOT in git — `.gitignore` `*.apk`)
+- Verzija: 1.3.2+6
+- Git: Claude Code NE commit-a/push-a — developer preuzima
+
+---
+
 ## Identified Issues
 
 - **Telegram Bot API limitation:** Bot prima poruke samo iz kanala gdje je dodan kao član. Public tipster kanali koji ne dozvoljavaju bot-ove nisu dostupni kroz Bot API. Za full public channel access trebala bi MTProto migracija u kasnijoj sesiji.

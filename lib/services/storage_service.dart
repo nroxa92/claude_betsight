@@ -3,7 +3,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/analysis_log.dart';
 import '../models/bet.dart';
 import '../models/cached_matches_entry.dart';
+import '../models/monitored_channel.dart';
 import '../models/odds_snapshot.dart';
+import '../models/recommendation.dart';
 import '../models/tipster_signal.dart';
 
 class StorageService {
@@ -13,6 +15,7 @@ class StorageService {
   static const _tipsterSignalsBox = 'tipster_signals';
   static const _oddsSnapshotsBox = 'odds_snapshots';
   static const _oddsCacheBox = 'odds_cache';
+  static const _channelsDetailBox = 'monitored_channels_detail';
   static const _cacheEntryKey = 'all_matches';
   static const _cacheTtlMinutesField = 'cache_ttl_minutes';
   static const _lastCleanupField = 'last_cleanup_at';
@@ -33,6 +36,7 @@ class StorageService {
     await Hive.openBox(_tipsterSignalsBox);
     await Hive.openBox(_oddsSnapshotsBox);
     await Hive.openBox(_oddsCacheBox);
+    await Hive.openBox(_channelsDetailBox);
   }
 
   static Box get _box => Hive.box(_settingsBox);
@@ -41,6 +45,7 @@ class StorageService {
   static Box get _signalsBox => Hive.box(_tipsterSignalsBox);
   static Box get _snapshotsBox => Hive.box(_oddsSnapshotsBox);
   static Box get _cacheBox => Hive.box(_oddsCacheBox);
+  static Box get _channelsBox => Hive.box(_channelsDetailBox);
 
   static String? getAnthropicApiKey() =>
       _box.get(_anthropicApiKeyField) as String?;
@@ -77,6 +82,37 @@ class StorageService {
 
   static Future<void> deleteAnalysisLog(String id) => _logsBox.delete(id);
   static Future<int> clearAllAnalysisLogs() => _logsBox.clear();
+
+  static Future<void> updateAnalysisLogFeedback(
+      String logId, UserFeedback feedback) async {
+    final map = _logsBox.get(logId) as Map<dynamic, dynamic>?;
+    if (map == null) return;
+    final log = AnalysisLog.fromMap(map);
+    final updated = log.copyWith(
+      userFeedback: feedback,
+      feedbackAt: DateTime.now(),
+    );
+    await saveAnalysisLog(updated);
+  }
+
+  static List<AnalysisLog> getLogsByRecommendation(RecommendationType type) {
+    return getAllAnalysisLogs()
+        .where((l) => l.recommendationType == type)
+        .toList();
+  }
+
+  static Map<RecommendationType, Map<UserFeedback, int>> getFeedbackStats() {
+    final stats = <RecommendationType, Map<UserFeedback, int>>{};
+    for (final log in getAllAnalysisLogs()) {
+      stats.putIfAbsent(log.recommendationType, () => {});
+      stats[log.recommendationType]!.update(
+        log.userFeedback,
+        (v) => v + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    return stats;
+  }
 
   static List<Bet> getAllBets() {
     final maps = _betsBoxRef.values.toList();
@@ -149,6 +185,39 @@ class StorageService {
       const [];
   static Future<void> saveMonitoredChannels(List<String> channels) =>
       _box.put(_monitoredChannelsField, channels);
+
+  static List<MonitoredChannel> getAllMonitoredChannels() {
+    final list = <MonitoredChannel>[];
+    for (final map in _channelsBox.values) {
+      try {
+        list.add(MonitoredChannel.fromMap(map as Map<dynamic, dynamic>));
+      } catch (_) {
+        // skip malformed
+      }
+    }
+    list.sort((a, b) => a.addedAt.compareTo(b.addedAt));
+    return list;
+  }
+
+  static Future<void> saveMonitoredChannel(MonitoredChannel channel) =>
+      _channelsBox.put(channel.username, channel.toMap());
+
+  static Future<void> deleteMonitoredChannel(String username) =>
+      _channelsBox.delete(username);
+
+  /// Migrates legacy `List<String>` channel list (settings box) into
+  /// per-channel MonitoredChannel records. No-op if already migrated
+  /// (channels box already populated) or if there is nothing to migrate.
+  static Future<void> migrateMonitoredChannels() async {
+    if (_channelsBox.isNotEmpty) return;
+    final oldList = getMonitoredChannels();
+    if (oldList.isEmpty) return;
+    final now = DateTime.now();
+    for (final username in oldList) {
+      final channel = MonitoredChannel(username: username, addedAt: now);
+      await saveMonitoredChannel(channel);
+    }
+  }
 
   static bool getTelegramEnabled() =>
       (_box.get(_telegramEnabledField) as bool?) ?? false;

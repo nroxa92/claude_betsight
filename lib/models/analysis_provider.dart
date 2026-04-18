@@ -3,8 +3,11 @@ import 'package:flutter/foundation.dart';
 import '../services/claude_service.dart';
 import '../services/storage_service.dart';
 import 'analysis_log.dart';
+import 'bet.dart';
 import 'match.dart';
+import 'odds_snapshot.dart';
 import 'recommendation.dart';
+import 'sport.dart';
 import 'tipster_signal.dart';
 
 class AnalysisProvider extends ChangeNotifier {
@@ -14,6 +17,8 @@ class AnalysisProvider extends ChangeNotifier {
   String? _error;
   List<Match> _stagedMatches = [];
   List<TipsterSignal> _stagedSignals = [];
+  String? _lastLogId;
+  String? _inputPrefill;
 
   AnalysisProvider({ClaudeService? service})
       : _service = service ?? ClaudeService() {
@@ -53,33 +58,76 @@ class AnalysisProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? get lastLogId => _lastLogId;
+  String? get inputPrefill => _inputPrefill;
+
+  void setInputPrefill(String text) {
+    _inputPrefill = text;
+    notifyListeners();
+  }
+
+  void clearInputPrefill() {
+    if (_inputPrefill == null) return;
+    _inputPrefill = null;
+    notifyListeners();
+  }
+
+  Future<void> recordFeedback(String logId, UserFeedback feedback) async {
+    await StorageService.updateAnalysisLogFeedback(logId, feedback);
+  }
+
   static const _systemPrompt = '''
-You are BetSight AI, a sports betting intelligence assistant.
-Your job is to analyze matches, odds, and betting value across soccer, basketball, and tennis.
+You are BetSight AI, a specialized sports betting intelligence assistant.
+You help the user find value bets across soccer, basketball, and tennis by combining match context, real odds, tipster signals, and the user's betting history.
 
-## Analysis method
+## User profile
 
-When match context is provided, calculate implied probability from decimal odds (probability = 1/odds) for each outcome.
-Compare implied probability to your own estimate based on team form, head-to-head history, injuries, and recent news you may know about.
-A match has value when your estimate exceeds implied probability by a meaningful margin (at least 3 percentage points).
+The user is an experienced bettor and technical analyst. Do not explain basic concepts (implied probability, bookmaker margin, Asian handicap, spread, over/under) — use them directly. The user pastes match data, odds, and sometimes tipster signals in structured context blocks. Read them carefully before answering.
 
-Always mention bookmaker margin if it exceeds 8 percent (sign of a soft book).
-Always mention which specific outcome (home/draw/away) looks like value, not just "the match".
+## Objective 1 — Odds analysis
 
-## Output format
+For every match you analyze:
+1. Calculate implied probability for each outcome: `p = 1 / decimal_odds`
+2. Sum them — if total > 1.0, the excess is the bookmaker margin (e.g., 1.07 total = 7% margin)
+3. Flag if margin > 8% (soft book, worse value across the board)
+4. Identify which outcome is most mispriced — this is the candidate for value
+
+If the user provides odds drift data in `[ODDS DRIFT]` block, interpret significant moves (>3%) as smart money signal toward the outcome with falling odds.
+
+## Objective 2 — Match context
+
+Use the user-provided `[SELECTED MATCHES]` block as primary context. If recent form, head-to-head, injuries, or weather data is available (either in the block or from your training knowledge on well-known leagues/teams), incorporate it. For tennis, consider surface and recent rankings. For basketball, consider pace and rest days.
+
+If the user provides `[TIPSTER SIGNALS]` block, treat these as third-party opinions — not facts. Note which channels flagged this match and which outcomes they favored, but do not auto-trust.
+
+If the user provides `[BETTING HISTORY]` block, notice patterns: is this the fifth time the user bets Arsenal this week? Flag potential confirmation bias politely.
+
+## Objective 3 — Recommendation
 
 Every response MUST end with exactly one of these three markers on its own line:
 
-**VALUE** — clear edge detected on a specific outcome, recommend a bet
-**WATCH** — interesting spot but edge is marginal or data is incomplete, monitor only
-**SKIP** — no edge, fair odds, or too uncertain
+**VALUE** — clear edge detected. You MUST specify:
+  - WHICH outcome (Home / Draw / Away / specific player / Over X.X / etc.)
+  - At WHICH odds (the current odds from context)
+  - Your estimated probability vs implied probability (at least 3 percentage points edge)
+  - A concrete next step (e.g., "stake 2% of bankroll", "wait for odds to rise above 2.10")
 
-Never combine markers. Never skip the marker. The marker must be on its own line as the last line of your response.
+**WATCH** — interesting spot but edge is marginal, data incomplete, or close to kickoff without confirmation. The user should monitor, not bet yet.
+
+**SKIP** — no edge, fair odds, or too uncertain.
+
+Never combine markers. Never skip the marker. The marker goes on its own line as the last line.
 
 ## Constraints
 
-This is informational analysis, not financial advice. Users must do their own research and gamble responsibly.
-Never suggest loan-based betting, chasing losses, or increasing stakes after a loss.
+- This is pattern analysis and informational research, not financial advice.
+- Never suggest loan-based betting, chasing losses, or increasing stakes after a loss.
+- Respect the user's bankroll if provided — suggest stakes as percentage, not absolute amounts.
+- If data is genuinely insufficient to form a view, say SKIP with reason — do not fabricate analysis.
+
+## Language
+
+Respond in the language the user uses (English, Croatian, or other). Internal reasoning is always in English for consistency. Sport terminology stays in English even in Croatian responses (e.g., "Asian handicap", "over/under", "moneyline").
 ''';
 
   Future<void> setApiKey(String key) async {
@@ -106,25 +154,43 @@ Never suggest loan-based betting, chasing losses, or increasing stakes after a l
   }
 
   String _buildUserMessage(
-    String text,
+    String text, {
     List<Match>? contextMatches,
     List<TipsterSignal>? contextSignals,
-  ) {
+    List<Bet>? bettingHistory,
+    Map<String, OddsDrift>? driftByMatchId,
+  }) {
     final hasMatches = contextMatches != null && contextMatches.isNotEmpty;
     final hasSignals = contextSignals != null && contextSignals.isNotEmpty;
-    if (!hasMatches && !hasSignals) return text;
+    final hasHistory = bettingHistory != null && bettingHistory.isNotEmpty;
+    if (!hasMatches && !hasSignals && !hasHistory) return text;
 
     final buf = StringBuffer();
     if (hasMatches) {
       buf.writeln('[SELECTED MATCHES]');
       for (final m in contextMatches) {
-        final h = m.h2h?.home.toStringAsFixed(2) ?? '-';
-        final d = m.h2h?.draw?.toStringAsFixed(2) ?? '-';
-        final a = m.h2h?.away.toStringAsFixed(2) ?? '-';
+        final h2h = m.h2h;
+        final oddsStr = h2h == null
+            ? 'odds unavailable'
+            : h2h.draw == null
+                ? 'odds H/A: ${h2h.home.toStringAsFixed(2)}/${h2h.away.toStringAsFixed(2)}'
+                : 'odds H/D/A: ${h2h.home.toStringAsFixed(2)}/${h2h.draw!.toStringAsFixed(2)}/${h2h.away.toStringAsFixed(2)}';
+        final bookmaker = h2h?.bookmaker ?? 'unknown';
         buf.writeln(
-          '${m.league}: ${m.home} vs ${m.away} | odds $h-$d-$a | kickoff ${m.commenceTime.toIso8601String()}',
+          '${m.league}: ${m.home} vs ${m.away} | '
+          'kickoff ${m.commenceTime.toIso8601String()} | '
+          '$oddsStr | bookmaker $bookmaker',
         );
+        final drift = driftByMatchId?[m.id];
+        if (drift != null && drift.hasSignificantMove) {
+          final dom = drift.dominantDrift;
+          final sign = dom.percent > 0 ? '+' : '';
+          buf.writeln(
+            '  [drift] ${dom.side} $sign${dom.percent.toStringAsFixed(1)}% since last snapshot',
+          );
+        }
       }
+      buf.writeln('[/SELECTED MATCHES]');
       buf.writeln();
     }
     if (hasSignals) {
@@ -133,6 +199,27 @@ Never suggest loan-based betting, chasing losses, or increasing stakes after a l
         buf.writeln(s.toClaudeContext());
       }
       buf.writeln('[/TIPSTER SIGNALS]');
+      buf.writeln();
+    }
+    if (hasHistory) {
+      buf.writeln('[BETTING HISTORY — last ${bettingHistory.length} bets]');
+      for (final bet in bettingHistory) {
+        final outcome = bet.actualProfit;
+        final outcomeStr = outcome == null
+            ? 'pending'
+            : outcome > 0
+                ? 'won +${outcome.toStringAsFixed(2)}'
+                : outcome < 0
+                    ? 'lost ${outcome.toStringAsFixed(2)}'
+                    : 'void';
+        buf.writeln(
+          '${bet.placedAt.toIso8601String().substring(0, 10)} | '
+          '${bet.sport.display} | ${bet.home} vs ${bet.away} | '
+          '${bet.selection.display} @ ${bet.odds.toStringAsFixed(2)} | '
+          'stake ${bet.stake.toStringAsFixed(2)} | $outcomeStr',
+        );
+      }
+      buf.writeln('[/BETTING HISTORY]');
       buf.writeln();
     }
     buf.write(text);
@@ -149,10 +236,35 @@ Never suggest loan-based betting, chasing losses, or increasing stakes after a l
     final effectiveSignals =
         _stagedSignals.isNotEmpty ? _stagedSignals : null;
 
+    List<Bet>? history;
+    try {
+      final all = StorageService.getAllBets()
+        ..sort((a, b) => b.placedAt.compareTo(a.placedAt));
+      if (all.isNotEmpty) history = all.take(5).toList();
+    } catch (_) {
+      history = null;
+    }
+
+    Map<String, OddsDrift>? drifts;
+    if (effectiveContext != null) {
+      final m = <String, OddsDrift>{};
+      for (final match in effectiveContext) {
+        final snapshots =
+            StorageService.getSnapshotsForMatch(match.id);
+        if (snapshots.length >= 2) {
+          m[match.id] =
+              OddsDrift.compute(snapshots.first, snapshots.last);
+        }
+      }
+      if (m.isNotEmpty) drifts = m;
+    }
+
     final userContent = _buildUserMessage(
       trimmed,
-      effectiveContext,
-      effectiveSignals,
+      contextMatches: effectiveContext,
+      contextSignals: effectiveSignals,
+      bettingHistory: history,
+      driftByMatchId: drifts,
     );
     final userMessage = ChatMessage(role: 'user', content: userContent);
     _messages.add(userMessage);
@@ -179,6 +291,7 @@ Never suggest loan-based betting, chasing losses, or increasing stakes after a l
               effectiveContext?.map((m) => m.id).toList() ?? const [],
           recommendationType: parseRecommendationType(reply),
         );
+        _lastLogId = log.id;
         await StorageService.saveAnalysisLog(log);
       } catch (e) {
         debugPrint('Failed to save analysis log: $e');

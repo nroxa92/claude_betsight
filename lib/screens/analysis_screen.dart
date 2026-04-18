@@ -6,9 +6,9 @@ import '../models/recommendation.dart';
 import '../models/sport.dart';
 import '../models/telegram_provider.dart';
 import '../theme/app_theme.dart';
-import '../widgets/bet_entry_sheet.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/signal_card.dart';
+import '../widgets/trade_action_bar.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -20,14 +20,45 @@ class AnalysisScreen extends StatefulWidget {
 class _AnalysisScreenState extends State<AnalysisScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _inputFocus = FocusNode();
   bool _disposed = false;
+  AnalysisProvider? _listenedProvider;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = context.read<AnalysisProvider>();
+    if (!identical(provider, _listenedProvider)) {
+      _listenedProvider?.removeListener(_handlePrefill);
+      provider.addListener(_handlePrefill);
+      _listenedProvider = provider;
+    }
+  }
 
   @override
   void dispose() {
     _disposed = true;
+    _listenedProvider?.removeListener(_handlePrefill);
     _textController.dispose();
     _scrollController.dispose();
+    _inputFocus.dispose();
     super.dispose();
+  }
+
+  void _handlePrefill() {
+    if (_disposed) return;
+    final provider = _listenedProvider;
+    if (provider == null) return;
+    final prefill = provider.inputPrefill;
+    if (prefill == null) return;
+    if (_textController.text.isEmpty) {
+      _textController.text = prefill;
+      _textController.selection = TextSelection.fromPosition(
+        TextPosition(offset: prefill.length),
+      );
+      _inputFocus.requestFocus();
+    }
+    provider.clearInputPrefill();
   }
 
   void _scrollToBottom() {
@@ -96,13 +127,25 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                           final isValueResponse = !isUser &&
                               parseRecommendationType(m.content) ==
                                   RecommendationType.value;
+                          final isLastMessage =
+                              i == p.messages.length - 1;
+                          final showActionBar = isValueResponse &&
+                              isLastMessage &&
+                              p.lastLogId != null;
                           return Column(
                             crossAxisAlignment: isUser
                                 ? CrossAxisAlignment.end
                                 : CrossAxisAlignment.start,
                             children: [
                               ChatBubble(text: m.content, isUser: isUser),
-                              if (isValueResponse) _buildLogBetButton(p),
+                              if (showActionBar)
+                                TradeActionBar(
+                                  logId: p.lastLogId!,
+                                  assistantResponse: m.content,
+                                  stagedMatch: p.stagedMatches.isNotEmpty
+                                      ? p.stagedMatches.first
+                                      : null,
+                                ),
                             ],
                           );
                         },
@@ -228,30 +271,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     );
   }
 
-  Widget _buildLogBetButton(AnalysisProvider p) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 48, 12),
-      child: OutlinedButton.icon(
-        onPressed: () {
-          final prefilled = p.stagedMatches.isNotEmpty
-              ? p.stagedMatches.first
-              : null;
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            builder: (_) => BetEntrySheet(prefilledMatch: prefilled),
-          );
-        },
-        icon: const Icon(Icons.receipt_long),
-        label: const Text('Log this as a bet'),
-      ),
-    );
-  }
-
   Widget _buildStagedBar(AnalysisProvider p) {
     final n = p.stagedMatches.length;
     return Container(
@@ -326,6 +345,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             Expanded(
               child: TextField(
                 controller: _textController,
+                focusNode: _inputFocus,
                 maxLines: 4,
                 minLines: 1,
                 enabled: !p.isLoading,

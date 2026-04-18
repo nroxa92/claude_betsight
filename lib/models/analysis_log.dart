@@ -2,6 +2,8 @@ import 'dart:math';
 
 import 'recommendation.dart';
 
+enum UserFeedback { none, logged, skipped, askedMore }
+
 class AnalysisLog {
   final String id;
   final DateTime timestamp;
@@ -9,6 +11,8 @@ class AnalysisLog {
   final String assistantResponse;
   final List<String> contextMatchIds;
   final RecommendationType recommendationType;
+  final UserFeedback userFeedback;
+  final DateTime? feedbackAt;
 
   const AnalysisLog({
     required this.id,
@@ -17,7 +21,25 @@ class AnalysisLog {
     required this.assistantResponse,
     required this.contextMatchIds,
     required this.recommendationType,
+    this.userFeedback = UserFeedback.none,
+    this.feedbackAt,
   });
+
+  AnalysisLog copyWith({
+    UserFeedback? userFeedback,
+    DateTime? feedbackAt,
+  }) {
+    return AnalysisLog(
+      id: id,
+      timestamp: timestamp,
+      userMessage: userMessage,
+      assistantResponse: assistantResponse,
+      contextMatchIds: contextMatchIds,
+      recommendationType: recommendationType,
+      userFeedback: userFeedback ?? this.userFeedback,
+      feedbackAt: feedbackAt ?? this.feedbackAt,
+    );
+  }
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -26,6 +48,8 @@ class AnalysisLog {
         'assistantResponse': assistantResponse,
         'contextMatchIds': contextMatchIds,
         'recommendationType': recommendationType.name,
+        'userFeedback': userFeedback.name,
+        'feedbackAt': feedbackAt?.toIso8601String(),
       };
 
   factory AnalysisLog.fromMap(Map<dynamic, dynamic> map) => AnalysisLog(
@@ -38,6 +62,13 @@ class AnalysisLog {
           (t) => t.name == map['recommendationType'],
           orElse: () => RecommendationType.none,
         ),
+        userFeedback: UserFeedback.values.firstWhere(
+          (f) => f.name == map['userFeedback'],
+          orElse: () => UserFeedback.none,
+        ),
+        feedbackAt: map['feedbackAt'] == null
+            ? null
+            : DateTime.parse(map['feedbackAt'] as String),
       );
 }
 
