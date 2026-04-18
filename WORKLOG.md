@@ -1186,9 +1186,112 @@
 
 ---
 
+---
+---
+
+## Session 9: 2026-04-18 — Backlog Cleanup + Tennis Minimal + Accumulator Rename
+
+**Kontekst:** S8 je doveo Identified Issues backlog na 3. S9 rješava preostala 2 (tennis charts coverage + Accumulator import collision) i formalno prekvalificira treći (Telegram Bot API) kao by-design. Patch bump na 3.1.1+10 — cleanup + jedan mali feature (TennisInfoPanel). Nakon S9, BetSight ima 0 otvorenih bugova i 1 dokumentirano by-design ograničenje.
+
+---
+
+### Task 1 — Pubspec Bump + Telegram Issue Reclassification
+**Status:** Completed
+
+**Opis:** Verzija bump-ana na 3.1.1+10 (patch — cleanup sesija, nema breaking funkcionalnih promjena). Telegram Bot API limitation prekvalificiran iz "open issue" u formalnu "By-Design Will Not Fix" kategoriju s 4 dokumentirana obrazloženja (platformski / tehnički / security / arhitekturalni) i preporučenim workflow-om za korisnika (bot kroz @BotFather za vlastite kanale, alternativni izvori kroz Reddit/Football-Data za nedostupne tipster kanale).
+
+**Komande izvršene:** flutter analyze, flutter build windows (odgođeno u Task 4 finalnoj verifikaciji jer Task 1 samo modificira WORKLOG i pubspec bez code promjena).
+
+**Ažurirani fajlovi:**
+- `pubspec.yaml` — version bump na `3.1.1+10`.
+- `WORKLOG.md` — Identified Issues sekcija reorganizirana.
+
+**Verifikacija:** flutter analyze 0 issues (nema code promjena u ovom tasku).
+
+---
+
+### Task 2 — Tennis Minimal: TennisInfoPanel
+**Status:** Completed
+
+**Opis:** MatchDetailScreen Charts tab sada renderira tier-specific sekcije ovisno o Sport enumu. Za soccer zadržan postojeći FormChart flow. Za tennis umjesto prazne sekcije sada TennisInfoPanel widget koji prikazuje: (a) bookmaker favourite badge (zeleni s zvjezdicom — igrač s nižim kvotama), (b) implied probability tile-ove za oba igrača (s highlight-om favorita — 1.5px green border), (c) margin indikator s label-om "sharp"/"normal"/"soft" ovisno o threshold-u (<5/<8/≥8), (d) info note objašnjava zašto nema detaljne forme (nema dedicated tennis data source-a, preporuka ATP/WTA site). Basketball dobio placeholder tekst koji upućuje korisnika na Intelligence tab za last10 stats.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/widgets/charts/tennis_info_panel.dart` — TennisInfoPanel StatelessWidget + privatni `_ProbTile`; handle-a `h2h == null` fallback s "No odds data" porukom.
+
+**Ažurirani fajlovi:**
+- `lib/screens/match_detail_screen.dart` — uvozi TennisInfoPanel; `_ChartsTab` dobio sport-specific branching (soccer → FormChart / tennis → TennisInfoPanel / basketball → placeholder text).
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 3 — Accumulator → BetAccumulator Rename
+**Status:** Completed
+
+**Opis:** Klasa `Accumulator` preimenovana u `BetAccumulator` kroz cijeli codebase. AccumulatorLeg / AccumulatorStatus / AccumulatorsProvider / AccumulatorCard / AccumulatorBuilderScreen ostaju jer nisu kolidirali s Material lib. Rename odvijen fajl po fajl (constructor + copyWith + fromMap factory + storage getter/setter signatures + ChangeNotifier field tipovi + widget field tipovi). `import 'package:flutter/material.dart' hide Accumulator;` uklonjen iz 2 fajla (accumulator_builder_screen, accumulator_card) — sad standardni material import.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/models/accumulator.dart` — `class Accumulator` → `class BetAccumulator`; constructor / copyWith / fromMap factory signature-i.
+- `lib/models/accumulators_provider.dart` — svi `Accumulator` → `BetAccumulator` u field tipovima i factory pozivima.
+- `lib/services/storage_service.dart` — `getAllAccumulators` return type + internal list type + fromMap poziv; `saveAccumulator` parameter type.
+- `lib/widgets/accumulator_card.dart` — uklonjen `hide Accumulator`; `final Accumulator acca` → `final BetAccumulator acca`.
+- `lib/screens/accumulator_builder_screen.dart` — uklonjen `hide Accumulator`; `final Accumulator draft` → `final BetAccumulator draft`.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan.
+
+---
+
+### Task 4 — Final Identified Issues Cleanup + Verification
+**Status:** Completed
+
+**Opis:** Finalna sanity runda. Grep potvrdio da u codebase-u nema preostalih `hide Accumulator` import-a ni `class Accumulator` referenci (samo `class BetAccumulator`). APK uspješno buildan na 3.1.1. Identified Issues konsolidiran — preostaje samo 1 formalno "By-Design Will Not Fix" unos (Telegram Bot API). Backlog na povijesno minimumu.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows, flutter build apk --debug, grep sanity checks.
+
+**Sanity check rezultati:**
+- `grep "hide Accumulator" lib/` → no matches
+- `grep "class Accumulator\b" lib/` → no matches (samo BetAccumulator)
+- `grep "^version:" pubspec.yaml` → `version: 3.1.1+10` ✓
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan, flutter build apk --debug uspješan.
+
+---
+
+### Finalna verifikacija Session 9:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build windows — uspješan
+- flutter build apk --debug — uspješan
+- APK u rootu: betsight-v3.1.1.apk (NOT in git — `.gitignore` `*.apk`)
+- Verzija: **3.1.1+10** (patch bump)
+- Identified Issues: **1** (by-design Telegram only)
+- Git: Claude Code NE commit-a/push-a — developer preuzima
+
+---
+
+### Resolved in S9
+- ~~MatchDetailScreen Charts tab ne pokriva tennis~~ — resolved with TennisInfoPanel (S9 Task 2)
+- ~~Material Accumulator name collision~~ — resolved with BetAccumulator rename (S9 Task 3)
+
+*Backlog journey: S4 imao 1 → S5.5 ostao 1 → S6 dodao 3 (total 4) → S7 dodao 6 (total 10) → S8 riješio 7 (total 3) → S9 riješio 2 i re-klasificirao 1 (total 1 — by-design).*
+
+---
+
 ## Identified Issues
 
-- **Telegram Bot API limitation:** Bot prima poruke samo iz kanala gdje je dodan kao član. Public tipster kanali koji ne dozvoljavaju bot-ove nisu dostupni kroz Bot API. Za full public channel access trebala bi MTProto migracija u kasnijoj sesiji.
-- **MatchDetailScreen Charts tab ne pokriva tennis:** Charts tab pokazuje OddsMovement (uvijek) i FormChart (samo ako ima FootballDataSignal). NbaStatsSignal i tennis nisu vizualizirani. Manja vrijednost za tennis jer nema dedicated tennis service.
-- **Match name collision: Material `Accumulator` vs naš model:** Nije bug, samo coding-style napomena — `import 'package:flutter/material.dart' hide Accumulator;` korišteno u `accumulator_builder_screen.dart` i `accumulator_card.dart`. Buduće rename na `BetAccumulator` može biti čišće.
+### By-Design (Will Not Fix)
+
+- **Telegram Bot API limitation** *(resolved as by-design in S9)*
+  - **Status:** Formal decision to not migrate to MTProto.
+  - **Ograničenje:** Bot API (Telegram Bot platform) prima poruke samo iz kanala gdje je bot dodan kao član. Public tipster kanali koji ne dozvoljavaju bot-ove nedostupni su.
+  - **Zašto ne rješavamo:**
+    1. **Platformski razlog:** Telegram je namjerno dizajnirao Bot API i User API (MTProto) kao dvije odvojene pristupne rute. Bot API je za bot programe (subscribing), MTProto za user-level clients. To nije bug Bot API-ja — to je dizajnska odluka.
+    2. **Tehnički razlog:** MTProto u Dart ekosistemu nema produkcijski spreman SDK. `telegram_client` paket je eksperimentalni, `td_plugin` je Android-only i neaktivno održavan. Alternativa (C++ tdlib bindings kroz FFI) je nerazmjerno kompleksna za mobile MVP.
+    3. **Security razlog:** MTProto zahtijeva korisnikov API ID + API Hash + phone number + SMS verification. BetSight bi tako dobio pristup cijelom korisnikovom Telegram računu — ozbiljan security/privacy footprint koji ne opravdava korist.
+    4. **Arhitekturalni razlog:** BetSight od S6 koristi 5-source intelligence layer (Odds, Football-Data, BallDontLie, Reddit, Telegram). Telegram je 1 od 5 izvora, **ne primary**. Diverzifikacija kompenzira ograničenost pojedinačnog izvora — pattern posuđen iz CoinSight-a koji do v8.0.0 nikad nije dotakao MTProto i nije ga trebao.
+  - **Preporučeni workflow za korisnika:** kreirati vlastiti Telegram bot preko `@BotFather`, dodati bot kao admin u vlastite kanale (gdje agregira tipster content koji prati) ili u manje zajednice koje prihvaćaju bot-ove. Za "big public" tipster kanale koji ne dopuštaju bot-ove, BetSight ne nudi ekstrakciju — korisnik neka koristi Reddit i Football-Data kao alternativne izvore za tu vrstu intelligencea.
 

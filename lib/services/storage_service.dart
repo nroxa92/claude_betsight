@@ -261,11 +261,11 @@ class StorageService {
   static Future<void> saveNotifValueEnabled(bool v) =>
       _box.put(_notifValueEnabledField, v);
 
-  static List<Accumulator> getAllAccumulators() {
-    final list = <Accumulator>[];
+  static List<BetAccumulator> getAllAccumulators() {
+    final list = <BetAccumulator>[];
     for (final map in _accaBox.values) {
       try {
-        list.add(Accumulator.fromMap(map as Map<dynamic, dynamic>));
+        list.add(BetAccumulator.fromMap(map as Map<dynamic, dynamic>));
       } catch (_) {
         // skip malformed
       }
@@ -274,7 +274,7 @@ class StorageService {
     return list;
   }
 
-  static Future<void> saveAccumulator(Accumulator acca) =>
+  static Future<void> saveAccumulator(BetAccumulator acca) =>
       _accaBox.put(acca.id, acca.toMap());
 
   static Future<void> deleteAccumulator(String id) =>

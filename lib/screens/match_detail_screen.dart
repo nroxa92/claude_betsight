@@ -14,6 +14,7 @@ import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/charts/form_chart.dart';
 import '../widgets/charts/odds_movement_chart.dart';
+import '../widgets/charts/tennis_info_panel.dart';
 
 class MatchDetailScreen extends StatefulWidget {
   final Match match;
@@ -427,24 +428,36 @@ class _ChartsTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        if (fdSignal != null) ...[
-          Text('Form (last 5)',
-              style: TextStyle(color: Colors.grey[400], fontSize: 12)),
-          const SizedBox(height: 8),
-          FormChart(
-            teamName: fdSignal.homeTeam,
-            form: fdSignal.homeFormLast5,
-          ),
-          const SizedBox(height: 12),
-          FormChart(
-            teamName: fdSignal.awayTeam,
-            form: fdSignal.awayFormLast5,
-          ),
-        ] else
+        if (match.sport == Sport.soccer) ...[
+          if (fdSignal != null) ...[
+            Text(
+              'Form (last 5)',
+              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            FormChart(
+              teamName: fdSignal.homeTeam,
+              form: fdSignal.homeFormLast5,
+            ),
+            const SizedBox(height: 12),
+            FormChart(
+              teamName: fdSignal.awayTeam,
+              form: fdSignal.awayFormLast5,
+            ),
+          ] else
+            Text(
+              'Form data not yet fetched. Generate intelligence report first.',
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+            ),
+        ] else if (match.sport == Sport.tennis) ...[
+          TennisInfoPanel(match: match),
+        ] else if (match.sport == Sport.basketball) ...[
           Text(
-            'Form data not yet fetched. Generate intelligence report first.',
+            'NBA form data not yet visualized in Charts tab. '
+            'Generate intelligence report to see last10 stats in the Intelligence tab.',
             style: TextStyle(color: Colors.grey[500], fontSize: 12),
           ),
+        ],
       ],
     );
   }

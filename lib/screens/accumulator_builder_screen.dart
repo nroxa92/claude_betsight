@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' hide Accumulator;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
@@ -397,7 +397,7 @@ class _PickableMatchCard extends StatelessWidget {
 }
 
 class _SummaryCard extends StatelessWidget {
-  final Accumulator draft;
+  final BetAccumulator draft;
   final String currency;
 
   const _SummaryCard({required this.draft, required this.currency});

@@ -5,27 +5,27 @@ import 'accumulator.dart';
 import 'analysis_log.dart' show generateUuid;
 
 class AccumulatorsProvider extends ChangeNotifier {
-  List<Accumulator> _accumulators = [];
-  Accumulator? _currentDraft;
+  List<BetAccumulator> _accumulators = [];
+  BetAccumulator? _currentDraft;
 
   AccumulatorsProvider() {
     _accumulators = StorageService.getAllAccumulators();
   }
 
-  List<Accumulator> get all => List.unmodifiable(_accumulators);
-  Accumulator? get currentDraft => _currentDraft;
+  List<BetAccumulator> get all => List.unmodifiable(_accumulators);
+  BetAccumulator? get currentDraft => _currentDraft;
 
-  List<Accumulator> get building => _accumulators
+  List<BetAccumulator> get building => _accumulators
       .where((a) => a.status == AccumulatorStatus.building)
       .toList();
-  List<Accumulator> get placed => _accumulators
+  List<BetAccumulator> get placed => _accumulators
       .where((a) => a.status == AccumulatorStatus.placed)
       .toList();
-  List<Accumulator> get settled =>
+  List<BetAccumulator> get settled =>
       _accumulators.where((a) => a.status.isSettled).toList();
 
   void startNewDraft() {
-    _currentDraft = Accumulator(
+    _currentDraft = BetAccumulator(
       id: generateUuid(),
       legs: const [],
       stake: 0,
@@ -36,7 +36,7 @@ class AccumulatorsProvider extends ChangeNotifier {
   }
 
   void addLegToDraft(AccumulatorLeg leg) {
-    _currentDraft ??= Accumulator(
+    _currentDraft ??= BetAccumulator(
       id: generateUuid(),
       legs: const [],
       stake: 0,

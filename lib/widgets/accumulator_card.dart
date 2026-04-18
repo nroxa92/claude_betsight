@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' hide Accumulator;
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/accumulator.dart';
@@ -7,7 +7,7 @@ import '../models/bet.dart';
 import '../theme/app_theme.dart';
 
 class AccumulatorCard extends StatelessWidget {
-  final Accumulator acca;
+  final BetAccumulator acca;
   final String currency;
 
   const AccumulatorCard({

@@ -64,7 +64,7 @@ extension AccumulatorStatusMeta on AccumulatorStatus {
       this == AccumulatorStatus.partial;
 }
 
-class Accumulator {
+class BetAccumulator {
   final String id;
   final List<AccumulatorLeg> legs;
   final double stake;
@@ -74,7 +74,7 @@ class Accumulator {
   final DateTime? settledAt;
   final String? notes;
 
-  const Accumulator({
+  const BetAccumulator({
     required this.id,
     required this.legs,
     required this.stake,
@@ -130,7 +130,7 @@ class Accumulator {
     return warnings;
   }
 
-  Accumulator copyWith({
+  BetAccumulator copyWith({
     List<AccumulatorLeg>? legs,
     double? stake,
     AccumulatorStatus? status,
@@ -138,7 +138,7 @@ class Accumulator {
     DateTime? settledAt,
     String? notes,
   }) {
-    return Accumulator(
+    return BetAccumulator(
       id: id,
       legs: legs ?? this.legs,
       stake: stake ?? this.stake,
@@ -161,7 +161,8 @@ class Accumulator {
         'notes': notes,
       };
 
-  factory Accumulator.fromMap(Map<dynamic, dynamic> map) => Accumulator(
+  factory BetAccumulator.fromMap(Map<dynamic, dynamic> map) =>
+      BetAccumulator(
         id: map['id'] as String,
         legs: (map['legs'] as List<dynamic>)
             .map((l) =>
