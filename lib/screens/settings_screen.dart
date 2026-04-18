@@ -7,6 +7,7 @@ import '../models/bets_provider.dart';
 import '../models/matches_provider.dart';
 import '../models/telegram_provider.dart';
 import '../models/value_preset.dart';
+import '../services/storage_service.dart';
 import '../services/telegram_monitor.dart';
 import '../theme/app_theme.dart';
 
@@ -52,6 +53,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 16),
+          const _CacheLimitsSection(),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 16),
           const _BankrollSection(),
           const SizedBox(height: 24),
           const Divider(),
@@ -84,8 +89,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (v.isEmpty) return;
         await context.read<AnalysisProvider>().setApiKey(v);
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Saved')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Anthropic API key saved')),
+        );
         setState(() => _anthropicController.text = _mask(v));
       },
       onRemove: () async {
@@ -94,8 +100,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (!mounted) return;
         await context.read<AnalysisProvider>().removeApiKey();
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Removed')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Anthropic API key removed')),
+        );
         setState(() => _anthropicController.clear());
       },
     );
@@ -119,8 +126,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (v.isEmpty) return;
         await context.read<MatchesProvider>().setApiKey(v);
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Saved')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Odds API key saved')),
+        );
         setState(() => _oddsController.text = _mask(v));
       },
       onRemove: () async {
@@ -129,8 +137,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (!mounted) return;
         await context.read<MatchesProvider>().removeApiKey();
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Removed')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Odds API key removed')),
+        );
         setState(() => _oddsController.clear());
       },
     );
@@ -336,6 +345,127 @@ class _ApiKeySection extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CacheLimitsSection extends StatefulWidget {
+  const _CacheLimitsSection();
+
+  @override
+  State<_CacheLimitsSection> createState() => _CacheLimitsSectionState();
+}
+
+class _CacheLimitsSectionState extends State<_CacheLimitsSection> {
+  static const _ttlOptions = [5, 15, 30, 60];
+  late int _ttl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ttl = StorageService.getCacheTtlMinutes();
+  }
+
+  Future<void> _setTtl(int v) async {
+    await StorageService.saveCacheTtlMinutes(v);
+    if (!mounted) return;
+    setState(() => _ttl = v);
+  }
+
+  Color _progressColor(MatchesProvider p) {
+    final left = p.remainingRequests ?? 0;
+    if (left < 1) return AppTheme.red;
+    if (left < 20) return Colors.orange;
+    if (left < 100) return Colors.yellow;
+    return AppTheme.green;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.watch<MatchesProvider>();
+    final pct = p.requestsUsedPercent;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.speed, color: AppTheme.primary),
+            SizedBox(width: 8),
+            Text(
+              'Cache & Limits',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (pct == null)
+          Text(
+            'API usage will appear after the first refresh.',
+            style: TextStyle(color: Colors.grey[500], fontSize: 12),
+          )
+        else ...[
+          Text(
+            'API Usage this month',
+            style: TextStyle(color: Colors.grey[400], fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (pct / 100).clamp(0.0, 1.0),
+              minHeight: 8,
+              backgroundColor: AppTheme.card,
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(_progressColor(p)),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${MatchesProvider.apiMonthlyCap - (p.remainingRequests ?? 0)} / ${MatchesProvider.apiMonthlyCap}',
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+              Text(
+                '${p.remainingRequests} left',
+                style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              ),
+            ],
+          ),
+          Text(
+            'Resets on 1st of month',
+            style: TextStyle(color: Colors.grey[500], fontSize: 11),
+          ),
+        ],
+        const SizedBox(height: 20),
+        Text(
+          'Cache TTL',
+          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: [
+            for (final m in _ttlOptions)
+              ChoiceChip(
+                label: Text(m < 60 ? '$m min' : '1 h'),
+                selected: _ttl == m,
+                onSelected: (_) => _setTtl(m),
+                selectedColor: AppTheme.primary.withValues(alpha: 0.3),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Lower TTL = fresher data but more API calls.',
+          style: TextStyle(color: Colors.grey[500], fontSize: 11),
         ),
       ],
     );

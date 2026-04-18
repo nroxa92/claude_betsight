@@ -124,4 +124,48 @@ class Match {
 
   bool get isLive => DateTime.now().isAfter(commenceTime);
   Duration get timeToKickoff => commenceTime.difference(DateTime.now());
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'sport': sport.name,
+        'league': league,
+        'sportKey': sportKey,
+        'home': home,
+        'away': away,
+        'commenceTime': commenceTime.toIso8601String(),
+        'h2h': h2h == null
+            ? null
+            : {
+                'home': h2h!.home,
+                'draw': h2h!.draw,
+                'away': h2h!.away,
+                'lastUpdate': h2h!.lastUpdate.toIso8601String(),
+                'bookmaker': h2h!.bookmaker,
+              },
+      };
+
+  factory Match.fromMap(Map<dynamic, dynamic> map) {
+    final h2hMap = map['h2h'] as Map<dynamic, dynamic>?;
+    return Match(
+      id: map['id'] as String,
+      sport: Sport.values.firstWhere((s) => s.name == map['sport']),
+      league: map['league'] as String,
+      sportKey: map['sportKey'] as String,
+      home: map['home'] as String,
+      away: map['away'] as String,
+      commenceTime: DateTime.parse(map['commenceTime'] as String),
+      h2h: h2hMap == null
+          ? null
+          : H2HOdds(
+              home: (h2hMap['home'] as num).toDouble(),
+              draw: h2hMap['draw'] == null
+                  ? null
+                  : (h2hMap['draw'] as num).toDouble(),
+              away: (h2hMap['away'] as num).toDouble(),
+              lastUpdate:
+                  DateTime.parse(h2hMap['lastUpdate'] as String),
+              bookmaker: h2hMap['bookmaker'] as String,
+            ),
+    );
+  }
 }

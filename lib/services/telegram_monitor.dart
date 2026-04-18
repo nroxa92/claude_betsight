@@ -66,6 +66,9 @@ class TelegramMonitor {
     }
   }
 
+  /// One pass of long-poll-style getUpdates. Errors are swallowed because
+  /// the next interval tick will retry; we don't surface transient
+  /// network failures to the user.
   Future<void> _poll() async {
     if (!hasToken) return;
     try {

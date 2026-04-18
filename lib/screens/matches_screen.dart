@@ -5,6 +5,7 @@ import '../models/analysis_provider.dart';
 import '../models/match.dart';
 import '../models/matches_provider.dart';
 import '../models/navigation_controller.dart';
+import '../theme/app_theme.dart';
 import '../widgets/match_card.dart';
 import '../widgets/sport_selector.dart';
 
@@ -69,6 +70,8 @@ class _MatchesScreenState extends State<MatchesScreen>
               ),
             ),
           ),
+          const _ApiLimitBanner(),
+          const _CachedBadge(),
           TabBar(
             controller: _tabController,
             tabs: const [
@@ -125,7 +128,7 @@ class _MatchesScreenState extends State<MatchesScreen>
 
   Widget _buildMatchList(MatchesProvider p, List<Match> list) {
     return RefreshIndicator(
-      onRefresh: p.fetchMatches,
+      onRefresh: () => p.fetchMatches(forceRefresh: true),
       child: ListView.builder(
         itemCount: list.length,
         itemBuilder: (_, i) {
@@ -237,6 +240,111 @@ class _MatchesScreenState extends State<MatchesScreen>
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ApiLimitBanner extends StatelessWidget {
+  const _ApiLimitBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<MatchesProvider>(
+      builder: (_, p, child) {
+        if (p.remainingRequests == null) return const SizedBox.shrink();
+        if (p.isApiLimitCritical) {
+          return _banner(
+            color: AppTheme.red,
+            icon: Icons.error_outline,
+            text:
+                'API quota exhausted — showing cached data only. Resets 1st of month.',
+          );
+        }
+        if (p.isApiLimitLow) {
+          return _banner(
+            color: Colors.orange,
+            icon: Icons.warning_amber_outlined,
+            text:
+                'Only ${p.remainingRequests} API requests left this month.',
+          );
+        }
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  Widget _banner({
+    required Color color,
+    required IconData icon,
+    required String text,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: color, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CachedBadge extends StatelessWidget {
+  const _CachedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<MatchesProvider>(
+      builder: (_, p, child) {
+        if (!p.fromCache || p.cachedAt == null || p.allMatches.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final age = DateTime.now().difference(p.cachedAt!);
+        String ageStr;
+        if (age.inSeconds < 60) {
+          ageStr = 'just now';
+        } else if (age.inMinutes < 60) {
+          ageStr = '${age.inMinutes}m ago';
+        } else if (age.inHours < 24) {
+          ageStr = '${age.inHours}h ago';
+        } else {
+          ageStr = '${age.inDays}d ago';
+        }
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppTheme.card,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.cached, size: 14, color: Colors.grey[400]),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Cached ($ageStr) — pull to refresh',
+                  style:
+                      TextStyle(color: Colors.grey[400], fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

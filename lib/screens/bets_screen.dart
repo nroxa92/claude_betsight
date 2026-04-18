@@ -17,6 +17,7 @@ class BetsScreen extends StatefulWidget {
 class _BetsScreenState extends State<BetsScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  String? _lastShownError;
 
   @override
   void initState() {
@@ -28,6 +29,24 @@ class _BetsScreenState extends State<BetsScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _maybeShowError(BetsProvider p) {
+    final err = p.error;
+    if (err == null || err == _lastShownError) return;
+    _lastShownError = err;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(err),
+          action: SnackBarAction(
+            label: 'Dismiss',
+            onPressed: p.clearError,
+          ),
+        ),
+      );
+    });
   }
 
   void _showManualBetEntry(BuildContext context) {
@@ -77,6 +96,7 @@ class _BetsScreenState extends State<BetsScreen>
   Widget _buildOpenTab() {
     return Consumer<BetsProvider>(
       builder: (_, p, child) {
+        _maybeShowError(p);
         if (p.openBets.isEmpty) {
           return _buildEmptyState(
             icon: Icons.sentiment_neutral,
@@ -91,6 +111,7 @@ class _BetsScreenState extends State<BetsScreen>
   Widget _buildSettledTab() {
     return Consumer<BetsProvider>(
       builder: (_, p, child) {
+        _maybeShowError(p);
         if (p.settledBets.isEmpty) {
           return _buildEmptyState(
             icon: Icons.history,

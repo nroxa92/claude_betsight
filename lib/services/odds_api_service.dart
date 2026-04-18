@@ -3,7 +3,16 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/cached_matches_entry.dart';
 import '../models/match.dart';
+import 'storage_service.dart';
+
+typedef CachedMatchesResult = ({
+  List<Match> matches,
+  bool fromCache,
+  int? remaining,
+  DateTime? cachedAt,
+});
 
 class OddsApiService {
   final http.Client _client;
@@ -20,6 +29,11 @@ class OddsApiService {
 
   void setApiKey(String key) => _apiKey = key;
 
+  /// Fetch matches across one or more sport keys. Per-sport failures
+  /// (timeout, 4xx other than 401/429, malformed JSON) are silently
+  /// skipped and remaining sports still get tried — partial results are
+  /// preferable to all-or-nothing. 401/429 still throw OddsApiException
+  /// because they apply to the whole request, not a single sport.
   Future<List<Match>> getMatches({
     required List<String> sportKeys,
     String regions = 'eu',
@@ -79,6 +93,46 @@ class OddsApiService {
 
     allMatches.sort((a, b) => a.commenceTime.compareTo(b.commenceTime));
     return allMatches;
+  }
+
+  /// Cached fetch — returns cache hit if entry exists and isn't expired,
+  /// otherwise hits the API and saves a fresh entry. `forceRefresh` always
+  /// bypasses the cache (used by pull-to-refresh).
+  Future<CachedMatchesResult> getMatchesCached({
+    required List<String> sportKeys,
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh) {
+      final cached = StorageService.getCachedMatches();
+      if (cached != null) {
+        final ttlMinutes = StorageService.getCacheTtlMinutes();
+        if (!cached.isExpired(Duration(minutes: ttlMinutes))) {
+          if (cached.remainingRequests != null) {
+            _remainingRequests = cached.remainingRequests;
+          }
+          return (
+            matches: cached.matches,
+            fromCache: true,
+            remaining: cached.remainingRequests,
+            cachedAt: cached.fetchedAt,
+          );
+        }
+      }
+    }
+
+    final matches = await getMatches(sportKeys: sportKeys);
+    final entry = CachedMatchesEntry(
+      matches: matches,
+      fetchedAt: DateTime.now(),
+      remainingRequests: _remainingRequests,
+    );
+    await StorageService.saveCachedMatches(entry);
+    return (
+      matches: matches,
+      fromCache: false,
+      remaining: _remainingRequests,
+      cachedAt: null,
+    );
   }
 
   void dispose() => _client.close();

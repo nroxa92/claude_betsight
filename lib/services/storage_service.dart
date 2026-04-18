@@ -2,6 +2,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/analysis_log.dart';
 import '../models/bet.dart';
+import '../models/cached_matches_entry.dart';
 import '../models/odds_snapshot.dart';
 import '../models/tipster_signal.dart';
 
@@ -11,6 +12,10 @@ class StorageService {
   static const _betsBox = 'bets';
   static const _tipsterSignalsBox = 'tipster_signals';
   static const _oddsSnapshotsBox = 'odds_snapshots';
+  static const _oddsCacheBox = 'odds_cache';
+  static const _cacheEntryKey = 'all_matches';
+  static const _cacheTtlMinutesField = 'cache_ttl_minutes';
+  static const _lastCleanupField = 'last_cleanup_at';
   static const _anthropicApiKeyField = 'anthropic_api_key';
   static const _oddsApiKeyField = 'odds_api_key';
   static const _valuePresetField = 'value_preset';
@@ -27,6 +32,7 @@ class StorageService {
     await Hive.openBox(_betsBox);
     await Hive.openBox(_tipsterSignalsBox);
     await Hive.openBox(_oddsSnapshotsBox);
+    await Hive.openBox(_oddsCacheBox);
   }
 
   static Box get _box => Hive.box(_settingsBox);
@@ -34,6 +40,7 @@ class StorageService {
   static Box get _betsBoxRef => Hive.box(_betsBox);
   static Box get _signalsBox => Hive.box(_tipsterSignalsBox);
   static Box get _snapshotsBox => Hive.box(_oddsSnapshotsBox);
+  static Box get _cacheBox => Hive.box(_oddsCacheBox);
 
   static String? getAnthropicApiKey() =>
       _box.get(_anthropicApiKeyField) as String?;
@@ -170,6 +177,28 @@ class StorageService {
     return snapshots;
   }
 
+  /// Returns the most recent snapshot for a match (sorted ascending →
+  /// `.last` is newest), or null if there are none.
+  static OddsSnapshot? getLatestSnapshotForMatch(String matchId) {
+    final snapshots = getSnapshotsForMatch(matchId);
+    if (snapshots.isEmpty) return null;
+    return snapshots.last;
+  }
+
+  /// Saves snapshot only if odds differ from the last saved snapshot for
+  /// that match. Returns true if saved, false if skipped (no change).
+  static Future<bool> saveSnapshotIfChanged(OddsSnapshot snapshot) async {
+    final last = getLatestSnapshotForMatch(snapshot.matchId);
+    if (last != null &&
+        last.home == snapshot.home &&
+        last.draw == snapshot.draw &&
+        last.away == snapshot.away) {
+      return false;
+    }
+    await saveSnapshot(snapshot);
+    return true;
+  }
+
   static Future<int> clearOldSnapshots(
       {Duration keepFor = const Duration(days: 7)}) async {
     final cutoff = DateTime.now().subtract(keepFor);
@@ -196,4 +225,72 @@ class StorageService {
       <String>{};
   static Future<void> saveWatchedMatchIds(Set<String> ids) =>
       _box.put(_watchedMatchIdsField, ids.toList());
+
+  static CachedMatchesEntry? getCachedMatches() {
+    final map = _cacheBox.get(_cacheEntryKey);
+    if (map == null) return null;
+    try {
+      return CachedMatchesEntry.fromMap(map as Map<dynamic, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveCachedMatches(CachedMatchesEntry entry) =>
+      _cacheBox.put(_cacheEntryKey, entry.toMap());
+
+  static Future<void> clearCachedMatches() =>
+      _cacheBox.delete(_cacheEntryKey);
+
+  static int getCacheTtlMinutes() =>
+      (_box.get(_cacheTtlMinutesField) as int?) ?? 15;
+  static Future<void> saveCacheTtlMinutes(int minutes) =>
+      _box.put(_cacheTtlMinutesField, minutes);
+
+  static DateTime? getLastCleanupAt() {
+    final iso = _box.get(_lastCleanupField) as String?;
+    if (iso == null) return null;
+    try {
+      return DateTime.parse(iso);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveLastCleanupAt(DateTime t) =>
+      _box.put(_lastCleanupField, t.toIso8601String());
+
+  /// Runs cleanup of stale signals/snapshots/cache if the previous run was
+  /// more than 24h ago (or never ran). Returns counts of cleared items.
+  /// No-op (zero counts) when the 24h gate hasn't elapsed.
+  static Future<Map<String, int>> runScheduledCleanup() async {
+    final lastRun = getLastCleanupAt();
+    if (lastRun != null &&
+        DateTime.now().difference(lastRun) < const Duration(hours: 24)) {
+      return {
+        'signals_cleaned': 0,
+        'snapshots_cleaned': 0,
+        'cache_entries_cleaned': 0,
+      };
+    }
+
+    final signalsCleaned =
+        await clearOldSignals(keepFor: const Duration(days: 7));
+    final snapshotsCleaned =
+        await clearOldSnapshots(keepFor: const Duration(days: 7));
+
+    var cacheEntriesCleaned = 0;
+    final cached = getCachedMatches();
+    if (cached != null && cached.age > const Duration(hours: 24)) {
+      await clearCachedMatches();
+      cacheEntriesCleaned = 1;
+    }
+
+    await saveLastCleanupAt(DateTime.now());
+    return {
+      'signals_cleaned': signalsCleaned,
+      'snapshots_cleaned': snapshotsCleaned,
+      'cache_entries_cleaned': cacheEntriesCleaned,
+    };
+  }
 }

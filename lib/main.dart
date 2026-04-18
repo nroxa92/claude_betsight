@@ -17,8 +17,10 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await StorageService.init();
+    final cleanup = await StorageService.runScheduledCleanup();
+    debugPrint('Scheduled cleanup: $cleanup');
   } catch (e) {
-    debugPrint('StorageService init failed: $e');
+    debugPrint('StorageService init/cleanup failed: $e');
   }
   runApp(
     MultiProvider(

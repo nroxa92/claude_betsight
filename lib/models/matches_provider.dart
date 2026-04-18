@@ -16,6 +16,9 @@ class MatchesProvider extends ChangeNotifier {
   ValuePreset _valuePreset = ValuePreset.standard;
   final Set<String> _selectedMatchIds = {};
   Set<String> _watchedMatchIds = {};
+  bool _fromCache = false;
+  DateTime? _cachedAt;
+  int? _remainingRequests;
 
   MatchesProvider({OddsApiService? service})
       : _service = service ?? OddsApiService() {
@@ -36,8 +39,26 @@ class MatchesProvider extends ChangeNotifier {
   Sport? get selectedSport => _selectedSport;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  int? get remainingRequests => _service.remainingRequests;
+  int? get remainingRequests =>
+      _remainingRequests ?? _service.remainingRequests;
   bool get hasApiKey => _service.hasApiKey;
+  bool get fromCache => _fromCache;
+  DateTime? get cachedAt => _cachedAt;
+
+  /// Free tier monthly cap for The Odds API. Used to compute progress / %.
+  static const apiMonthlyCap = 500;
+
+  /// null until first API call lands.
+  double? get requestsUsedPercent {
+    if (remainingRequests == null) return null;
+    final used = apiMonthlyCap - remainingRequests!;
+    return (used / apiMonthlyCap) * 100;
+  }
+
+  bool get isApiLimitLow =>
+      remainingRequests != null && remainingRequests! < 20;
+  bool get isApiLimitCritical =>
+      remainingRequests != null && remainingRequests! < 1;
   ValuePreset get valuePreset => _valuePreset;
 
   List<Match> get valueBets {
@@ -97,6 +118,8 @@ class MatchesProvider extends ChangeNotifier {
   }
 
   Future<void> _captureSnapshotsForWatched() async {
+    var saved = 0;
+    var skipped = 0;
     for (final match in _allMatches) {
       if (!_watchedMatchIds.contains(match.id)) continue;
       final h2h = match.h2h;
@@ -110,7 +133,16 @@ class MatchesProvider extends ChangeNotifier {
         away: h2h.away,
         bookmaker: h2h.bookmaker,
       );
-      await StorageService.saveSnapshot(snapshot);
+      final didSave =
+          await StorageService.saveSnapshotIfChanged(snapshot);
+      if (didSave) {
+        saved++;
+      } else {
+        skipped++;
+      }
+    }
+    if (saved > 0 || skipped > 0) {
+      debugPrint('Snapshots: saved $saved, skipped (unchanged) $skipped');
     }
   }
 
@@ -137,9 +169,24 @@ class MatchesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> fetchMatches() async {
+  Future<void> fetchMatches({bool forceRefresh = false}) async {
     if (!hasApiKey) {
       _error = 'API key not configured';
+      notifyListeners();
+      return;
+    }
+
+    if (isApiLimitCritical && !forceRefresh) {
+      final cached = StorageService.getCachedMatches();
+      if (cached != null) {
+        _allMatches = cached.matches;
+        _fromCache = true;
+        _cachedAt = cached.fetchedAt;
+        _error = null;
+        notifyListeners();
+        return;
+      }
+      _error = 'Monthly API quota exhausted. Resets on 1st of month.';
       notifyListeners();
       return;
     }
@@ -155,8 +202,18 @@ class MatchesProvider extends ChangeNotifier {
     ];
 
     try {
-      _allMatches = await _service.getMatches(sportKeys: allKeys);
-      await _captureSnapshotsForWatched();
+      final result = await _service.getMatchesCached(
+        sportKeys: allKeys,
+        forceRefresh: forceRefresh,
+      );
+      _allMatches = result.matches;
+      _fromCache = result.fromCache;
+      _cachedAt = result.cachedAt;
+      _remainingRequests = result.remaining;
+
+      if (!_fromCache) {
+        await _captureSnapshotsForWatched();
+      }
     } on OddsApiException catch (e) {
       _error = e.message;
     } catch (_) {

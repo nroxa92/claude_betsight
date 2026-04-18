@@ -473,6 +473,119 @@
 
 ---
 
+---
+---
+
+## Session 5: 2026-04-18 — Infrastructure Hardening
+
+**Kontekst:** S1–S4 izgradili full feature set. S5 je hardening sesija — ne dodaje nove taba ni screena, fokusira se na održivost: cache layer (free tier Odds API nije izdržljiv bez njega), rate limit tracking + UI, snapshot dedup, scheduled cleanup jobs, error handling audit. Verzija je patch bump (1.3.1+5).
+
+---
+
+### Task 1 — Odds API Cache Layer
+**Status:** Completed
+
+**Opis:** Sve `fetchMatches()` pozive sada kontrolira lokalni cache. Cache entry sadrži List<Match> + fetchedAt + remainingRequests; TTL je konfigurabilan u settings boxu (default 15 min). Pull-to-refresh poziva `forceRefresh: true` koji bypass-a cache i uvijek hita API. MatchesProvider izlaže `fromCache` i `cachedAt` getter, MatchesScreen renderira diskretni "Cached (Xm ago)" badge ispod SportSelector-a kad je data iz cache-a. Match dobio `toMap`/`fromMap` (čišće od privatnih helpera u CachedMatchesEntry). Snapshot capture za watched mečeve sad se pokreće SAMO kad je data svježa (ne iz cache-a) — sprečava dupliciranje snapshota za istu API poziciju.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/models/cached_matches_entry.dart` — CachedMatchesEntry (matches/fetchedAt/remainingRequests) + age/isExpired/ageDisplay getteri + toMap/fromMap koji delegira na Match.toMap/fromMap.
+
+**Ažurirani fajlovi:**
+- `pubspec.yaml` — version bump na `1.3.1+5`.
+- `lib/models/match.dart` — dodane `toMap`/`fromMap` metode (uključuju serijalizaciju H2HOdds inline mape).
+- `lib/services/storage_service.dart` — uvozi CachedMatchesEntry; dodan `_oddsCacheBox` constant + `_cacheEntryKey` (fiksan ključ "all_matches") + `_cacheTtlMinutesField`; `init()` otvara šesti box; `_cacheBox` getter; `getCachedMatches`/`saveCachedMatches`/`clearCachedMatches` + `getCacheTtlMinutes` (default 15) /`saveCacheTtlMinutes`.
+- `lib/services/odds_api_service.dart` — uvozi CachedMatchesEntry + StorageService; nova typedef `CachedMatchesResult` (record); nova metoda `getMatchesCached` koja prvo provjeri cache (i postavi `_remainingRequests` iz njega), pa ako miss/expired/forceRefresh poziva postojeći `getMatches` i sprema novi entry.
+- `lib/models/matches_provider.dart` — dodana polja `_fromCache`/`_cachedAt`/`_remainingRequests` (lokalna kopija); getteri prilagođeni; `fetchMatches({forceRefresh = false})` koristi getMatchesCached i preskače snapshot capture kad je data iz cache-a.
+- `lib/screens/matches_screen.dart` — uvozi AppTheme; novi privatni `_CachedBadge` widget (Consumer<MatchesProvider>, vidljiv samo kad fromCache + cachedAt + non-empty); `_buildMatchList` RefreshIndicator sad zove `fetchMatches(forceRefresh: true)`.
+- `test/widget_test.dart` — setUpAll otvara `odds_cache` box.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan.
+
+---
+
+### Task 2 — Rate Limit Tracking + UI Warning
+**Status:** Completed
+
+**Opis:** MatchesProvider sada izlaže `requestsUsedPercent`/`isApiLimitLow`/`isApiLimitCritical` getter-e bazirane na free-tier capu (500 req/mj, exposed kao `MatchesProvider.apiMonthlyCap`). `fetchMatches` na početku radi hard-stop kad je critical (< 1) — vraća cache ako postoji, inače setira error. MatchesScreen renderira `_ApiLimitBanner` između SportSelector-a i CachedBadge-a: orange warning kad <20 left, red banner kad <1. Settings dobiva novu sekciju "Cache & Limits" iznad Bankroll-a: LinearProgressIndicator s threshold-bojom (green/yellow/orange/red), used/cap text + remaining + reset napomena, te ChoiceChip selektor TTL-a (5/15/30/60 min) s helper tekstom.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/models/matches_provider.dart` — dodana konstanta `apiMonthlyCap = 500`; getter `requestsUsedPercent` (null prije prvog poziva); thresholdi `isApiLimitLow`/`isApiLimitCritical`; `fetchMatches` early-return blok (cache fallback ili error) kad je critical i nije forceRefresh.
+- `lib/screens/matches_screen.dart` — novi privatni `_ApiLimitBanner` widget (red kad critical, orange kad low, hidden inače) s helper `_banner` metodom; ubacen u Column iznad CachedBadge-a.
+- `lib/screens/settings_screen.dart` — uvozi StorageService; nova privatna klasa `_CacheLimitsSection` StatefulWidget (učitava TTL u initState, `_setTtl` perzistira u Storage); progress bar s `_progressColor` po threshold-u; ChoiceChip selektor s 4 TTL opcije; renderira se izmedu Value Bets Filter i Bankroll sekcije.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 3 — Snapshot Deduplication
+**Status:** Completed
+
+**Opis:** `_captureSnapshotsForWatched` više ne piše identične snapshote — svaki novi snapshot prvo se uspoređuje s posljednjim za isti matchId, i ako su home/draw/away identične, save se preskoči. Ovo sprečava balooning Hive baze za watched mečeve čije se kvote rijetko mijenjaju. Debug log iznosi saved/skipped count za svaki capture pass.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/services/storage_service.dart` — dodana `getLatestSnapshotForMatch` (return last iz ascending-sorted liste) i `saveSnapshotIfChanged` (vraća bool — true saved, false skipped) — strict equality na home/draw/away (bookmaker se ignorira jer ostaje isti).
+- `lib/models/matches_provider.dart` — `_captureSnapshotsForWatched` koristi `saveSnapshotIfChanged`, broji saved/skipped i logira debugPrint kad ima rada.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 4 — Scheduled Cleanup Jobs
+**Status:** Completed
+
+**Opis:** Pri pokretanju app-a (`main` nakon Hive init) pokreće se `runScheduledCleanup` koji čisti signale i snapshote starije od 7 dana, te briše cache entry stariji od 24h. Cleanup je gateran preko `last_cleanup_at` timestamp-a — ako je zadnji run bio < 24h, vraća zero counts bez rada. Rezultati cleanupa logiraju se kroz debugPrint.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/services/storage_service.dart` — dodan `_lastCleanupField` constant; `getLastCleanupAt`/`saveLastCleanupAt`; `runScheduledCleanup` metoda (24h gate, vraća Map s 3 ključa: signals_cleaned/snapshots_cleaned/cache_entries_cleaned).
+- `lib/main.dart` — `main()` poziva `runScheduledCleanup` nakon `init()` u istom try/catch bloku, logira rezultat.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 5 — Error Handling Audit + Polish
+**Status:** Completed
+
+**Opis:** Audit svih providera i servisa: BetsProvider je imao nekorišten `_error` field bez UI hookupa — sada svaka mutirajuća metoda (addBet/settleBet/deleteBet/setBankroll) wrap-a Hive call u try/catch i postavlja informativnu poruku, a BetsScreen čita `error` getter i SnackBar-uje preko `_maybeShowError` (debounce-an `_lastShownError` da spriječi duplo prikazivanje istog errora). Dodan `clearError` u BetsProvider. Standardiziran SnackBar copy: API key Save/Remove sad koriste konkretan naziv ("Anthropic API key saved" / "Odds API key saved" / "...removed") umjesto generic "Saved"/"Removed". Dodani doc komentari na retry semantiku u TelegramMonitor._poll i OddsApiService.getMatches.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows.
+
+**Audit nalazi (sažeto):**
+- Provideri: matches/analysis/telegram već imaju `_error` + `clearError` + UI surfacing (Dismissible bar / SnackBar). BetsProvider — popravljen ovdje.
+- Servisi: OddsApiService/ClaudeService/TelegramException — svi imaju tipizirane exception klase. StorageService — try/catch u svim deserializacijama (silent skip, ne baca).
+- `_buildUserMessage` u AnalysisProvider već rukuje sve 4 kombinacije (matches∅ + signals∅, samo matches, samo signals, oba) — provjereno.
+- Test wrap već čisti providere kroz tearDown lifecycle (Provider sam invokira dispose); explicitan tearDown nije potreban.
+
+**Ažurirani fajlovi:**
+- `lib/models/bets_provider.dart` — dodan `clearError`; addBet/settleBet/deleteBet/setBankroll wrap-ani u try/catch i resetiraju `_error` na null kad uspije, postavljaju ga na specifičnu poruku kad faila.
+- `lib/screens/bets_screen.dart` — dodano `_lastShownError` polje + `_maybeShowError` helper (postFrameCallback debounced); pozvan iz oba tab buildera.
+- `lib/screens/settings_screen.dart` — SnackBar copy unificiran ("Anthropic API key saved/removed", "Odds API key saved/removed").
+- `lib/services/telegram_monitor.dart` — doc komentar na `_poll` (objašnjava silent fail / retry semantiku).
+- `lib/services/odds_api_service.dart` — doc komentar na `getMatches` (per-sport partial-failure semantika; 401/429 throw jer su request-wide).
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan, flutter build apk --debug uspješan.
+
+---
+
+### Finalna verifikacija Session 5:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build windows — uspješan
+- flutter build apk --debug — uspješan
+- APK u rootu: betsight-v1.3.1.apk (NOT in git — `.gitignore` `*.apk`)
+- Verzija: 1.3.1+5
+- Git: Claude Code NE commit-a/push-a — developer preuzima
+
+---
+
 ## Identified Issues
 
 - **Telegram Bot API limitation:** Bot prima poruke samo iz kanala gdje je dodan kao član. Public tipster kanali koji ne dozvoljavaju bot-ove nisu dostupni kroz Bot API. Za full public channel access trebala bi MTProto migracija u kasnijoj sesiji.

@@ -66,9 +66,20 @@ class BetsProvider extends ChangeNotifier {
       ? 0
       : (totalProfit / totalStakedOnSettled) * 100;
 
+  void clearError() {
+    if (_error == null) return;
+    _error = null;
+    notifyListeners();
+  }
+
   Future<void> addBet(Bet bet) async {
     _bets.add(bet);
-    await StorageService.saveBet(bet);
+    try {
+      await StorageService.saveBet(bet);
+      _error = null;
+    } catch (_) {
+      _error = 'Failed to save bet';
+    }
     notifyListeners();
   }
 
@@ -79,19 +90,34 @@ class BetsProvider extends ChangeNotifier {
     final updated =
         _bets[idx].copyWith(status: status, settledAt: DateTime.now());
     _bets[idx] = updated;
-    await StorageService.saveBet(updated);
+    try {
+      await StorageService.saveBet(updated);
+      _error = null;
+    } catch (_) {
+      _error = 'Failed to settle bet';
+    }
     notifyListeners();
   }
 
   Future<void> deleteBet(String id) async {
     _bets.removeWhere((b) => b.id == id);
-    await StorageService.deleteBet(id);
+    try {
+      await StorageService.deleteBet(id);
+      _error = null;
+    } catch (_) {
+      _error = 'Failed to delete bet';
+    }
     notifyListeners();
   }
 
   Future<void> setBankroll(BankrollConfig config) async {
     _bankroll = config;
-    await StorageService.saveBankrollConfig(config.toMap());
+    try {
+      await StorageService.saveBankrollConfig(config.toMap());
+      _error = null;
+    } catch (_) {
+      _error = 'Failed to save bankroll';
+    }
     notifyListeners();
   }
 }

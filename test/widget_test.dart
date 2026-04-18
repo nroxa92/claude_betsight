@@ -33,6 +33,7 @@ void main() {
     await Hive.openBox('bets');
     await Hive.openBox('tipster_signals');
     await Hive.openBox('odds_snapshots');
+    await Hive.openBox('odds_cache');
   });
 
   testWidgets('BetSightApp renders with bottom navigation', (tester) async {
