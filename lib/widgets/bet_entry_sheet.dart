@@ -7,6 +7,7 @@ import '../models/bet.dart';
 import '../models/bets_provider.dart';
 import '../models/match.dart';
 import '../models/sport.dart';
+import '../models/tier_provider.dart';
 import '../theme/app_theme.dart';
 
 class BetEntrySheet extends StatefulWidget {
@@ -92,6 +93,16 @@ class _BetEntrySheetState extends State<BetEntrySheet> {
       return;
     }
 
+    final tier = context.read<TierProvider>().currentTier;
+    final now = DateTime.now();
+    DateTime? matchStartedAt;
+    if (tier == InvestmentTier.live) {
+      // LIVE bet — place after kickoff; force `placedAt > matchStartedAt`.
+      matchStartedAt = now.subtract(const Duration(minutes: 1));
+    } else if (widget.prefilledMatch != null) {
+      matchStartedAt = widget.prefilledMatch!.commenceTime;
+    }
+
     final bet = Bet(
       id: generateUuid(),
       sport: _sport,
@@ -105,8 +116,8 @@ class _BetEntrySheetState extends State<BetEntrySheet> {
           ? null
           : _bookmakerCtrl.text.trim(),
       notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
-      placedAt: DateTime.now(),
-      matchStartedAt: widget.prefilledMatch?.commenceTime,
+      placedAt: now,
+      matchStartedAt: matchStartedAt,
       status: BetStatus.pending,
       linkedMatchId: widget.prefilledMatch?.id,
     );

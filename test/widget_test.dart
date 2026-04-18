@@ -4,6 +4,7 @@ import 'package:betsight/main.dart';
 import 'package:betsight/models/accumulators_provider.dart';
 import 'package:betsight/models/analysis_provider.dart';
 import 'package:betsight/models/bets_provider.dart';
+import 'package:betsight/models/intelligence_provider.dart';
 import 'package:betsight/models/matches_provider.dart';
 import 'package:betsight/models/navigation_controller.dart';
 import 'package:betsight/models/telegram_provider.dart';
@@ -23,6 +24,7 @@ Widget _wrap() {
       ChangeNotifierProvider(create: (_) => BetsProvider()),
       ChangeNotifierProvider(create: (_) => AccumulatorsProvider()),
       ChangeNotifierProvider(create: (_) => TelegramProvider()),
+      ChangeNotifierProvider(create: (_) => IntelligenceProvider()),
     ],
     child: const BetSightApp(),
   );

@@ -11,7 +11,6 @@ import 'models/telegram_provider.dart';
 import 'models/tier_provider.dart';
 import 'services/ball_dont_lie_service.dart';
 import 'services/football_data_service.dart';
-import 'services/intelligence_aggregator.dart';
 import 'services/notifications_service.dart';
 import 'services/reddit_monitor.dart';
 import 'widgets/tier_mode_selector.dart';
@@ -55,13 +54,12 @@ Future<void> main() async {
                 (footballKey != null && footballKey.isNotEmpty)
                     ? (FootballDataService()..setApiKey(footballKey))
                     : null;
-            final aggregator = IntelligenceAggregator(
+            provider.wireServices(
               footballService: footballService,
               nbaService: BallDontLieService(),
               redditMonitor: RedditMonitor(),
               telegramProvider: context.read<TelegramProvider>(),
             );
-            provider.wireAggregator(aggregator);
             return provider;
           },
         ),
@@ -85,8 +83,32 @@ class BetSightApp extends StatelessWidget {
   }
 }
 
-class MainNavigation extends StatelessWidget {
+class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
+
+  @override
+  State<MainNavigation> createState() => _MainNavigationState();
+}
+
+class _MainNavigationState extends State<MainNavigation> {
+  bool _autoRefreshStarted = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_autoRefreshStarted) return;
+    _autoRefreshStarted = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final intel = context.read<IntelligenceProvider>();
+      intel.startAutoRefresh(() {
+        final matches = context.read<MatchesProvider>();
+        return matches.allMatches
+            .where((m) => matches.isWatched(m.id))
+            .toList();
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

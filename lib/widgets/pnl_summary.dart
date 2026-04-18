@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/bets_provider.dart';
+import '../models/sport.dart';
+import '../models/sport_pl.dart';
 import '../theme/app_theme.dart';
 import 'charts/equity_curve_chart.dart';
 
@@ -90,9 +92,127 @@ class PlSummaryWidget extends StatelessWidget {
                   ),
                 ),
               ),
+            if (p.perSportBreakdown.isNotEmpty)
+              _PerSportCard(breakdown: p.perSportBreakdown),
           ],
         );
       },
+    );
+  }
+}
+
+class _PerSportCard extends StatelessWidget {
+  final Map<Sport, SportPl> breakdown;
+  const _PerSportCard({required this.breakdown});
+
+  static const _headerStyle = TextStyle(
+    fontSize: 10,
+    color: Colors.grey,
+    fontWeight: FontWeight.w500,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Per-sport breakdown',
+              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: const [
+                SizedBox(
+                  width: 90,
+                  child: Text('Sport', style: _headerStyle),
+                ),
+                Expanded(
+                  child: Text('Bets',
+                      style: _headerStyle, textAlign: TextAlign.right),
+                ),
+                Expanded(
+                  child: Text('Win%',
+                      style: _headerStyle, textAlign: TextAlign.right),
+                ),
+                Expanded(
+                  child: Text('ROI',
+                      style: _headerStyle, textAlign: TextAlign.right),
+                ),
+                SizedBox(
+                  width: 70,
+                  child: Text('P/L',
+                      style: _headerStyle, textAlign: TextAlign.right),
+                ),
+              ],
+            ),
+            const Divider(height: 12),
+            ...breakdown.entries.map((entry) {
+              final pl = entry.value;
+              final color = pl.roiPercent > 0
+                  ? AppTheme.green
+                  : pl.roiPercent < 0
+                      ? AppTheme.red
+                      : Colors.grey;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 90,
+                      child: Row(
+                        children: [
+                          Text(pl.sport.icon),
+                          const SizedBox(width: 4),
+                          Text(
+                            pl.sport.display,
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Text('${pl.bets}',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12),
+                          textAlign: TextAlign.right),
+                    ),
+                    Expanded(
+                      child: Text('${pl.winRate.toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 12),
+                          textAlign: TextAlign.right),
+                    ),
+                    Expanded(
+                      child: Text(
+                        '${pl.roiPercent > 0 ? "+" : ""}${pl.roiPercent.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                            color: color,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 70,
+                      child: Text(
+                        '${pl.totalProfit > 0 ? "+" : ""}${pl.totalProfit.toStringAsFixed(2)}',
+                        style: TextStyle(color: color, fontSize: 12),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
     );
   }
 }

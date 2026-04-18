@@ -8,6 +8,7 @@ import '../models/tier_provider.dart';
 import '../widgets/accumulator_card.dart';
 import '../widgets/bet_card.dart';
 import '../widgets/bet_entry_sheet.dart';
+import '../widgets/bets_filter_bar.dart';
 import '../widgets/pnl_summary.dart';
 import 'accumulator_builder_screen.dart';
 
@@ -98,28 +99,42 @@ class _BetsScreenState extends State<BetsScreen>
   }
 
   Widget _buildRegularView() {
-    return Column(
-      children: [
-        const PlSummaryWidget(),
-        TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Open'),
-            Tab(text: 'Settled'),
+    return Consumer<TierProvider>(
+      builder: (_, tierProv, child) {
+        final tier = tierProv.currentTier;
+        return Column(
+          children: [
+            const PlSummaryWidget(),
+            const BetsFilterBar(),
+            TabBar(
+              controller: _tabController,
+              tabs: const [
+                Tab(text: 'Open'),
+                Tab(text: 'Settled'),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildOpenTab(tier),
+                  _buildSettledTab(tier),
+                ],
+              ),
+            ),
           ],
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildOpenTab(),
-              _buildSettledTab(),
-            ],
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
+
+  List<Bet> _filterBetsForTier(List<Bet> bets, InvestmentTier tier) =>
+      switch (tier) {
+        InvestmentTier.preMatch =>
+          bets.where((b) => b.isPreMatchBet).toList(),
+        InvestmentTier.live => bets.where((b) => b.isLiveBet).toList(),
+        InvestmentTier.accumulator => const [],
+      };
 
   Widget _buildAccumulatorView() {
     return Consumer2<AccumulatorsProvider, BetsProvider>(
@@ -169,32 +184,42 @@ class _BetsScreenState extends State<BetsScreen>
     );
   }
 
-  Widget _buildOpenTab() {
+  Widget _buildOpenTab(InvestmentTier tier) {
     return Consumer<BetsProvider>(
       builder: (_, p, child) {
         _maybeShowError(p);
-        if (p.openBets.isEmpty) {
+        final tierFiltered = _filterBetsForTier(p.openBets, tier);
+        final filtered = p.applyFilters(tierFiltered);
+        if (filtered.isEmpty) {
           return _buildEmptyState(
             icon: Icons.sentiment_neutral,
-            text: 'No open bets — tap + to log one',
+            text: p.hasActiveFilters
+                ? 'No open bets match your filters'
+                : tier == InvestmentTier.live
+                    ? 'No live bets — place one during a match'
+                    : 'No open bets — tap + to log one',
           );
         }
-        return _buildBetList(p, p.openBets);
+        return _buildBetList(p, filtered);
       },
     );
   }
 
-  Widget _buildSettledTab() {
+  Widget _buildSettledTab(InvestmentTier tier) {
     return Consumer<BetsProvider>(
       builder: (_, p, child) {
         _maybeShowError(p);
-        if (p.settledBets.isEmpty) {
+        final tierFiltered = _filterBetsForTier(p.settledBets, tier);
+        final filtered = p.applyFilters(tierFiltered);
+        if (filtered.isEmpty) {
           return _buildEmptyState(
             icon: Icons.history,
-            text: 'No settled bets yet',
+            text: p.hasActiveFilters
+                ? 'No settled bets match your filters'
+                : 'No settled bets yet',
           );
         }
-        return _buildBetList(p, p.settledBets);
+        return _buildBetList(p, filtered);
       },
     );
   }

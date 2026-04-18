@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/analysis_provider.dart';
 import '../models/bankroll.dart';
 import '../models/bets_provider.dart';
+import '../models/intelligence_provider.dart';
 import '../models/matches_provider.dart';
 import '../models/telegram_provider.dart';
 import '../models/value_preset.dart';
@@ -66,6 +67,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(),
           const SizedBox(height: 16),
           const _BankrollSection(),
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 16),
+          const _NotificationsSection(),
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 16),
@@ -175,11 +180,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (v.isEmpty) return;
         await StorageService.saveFootballDataApiKey(v);
         if (!mounted) return;
+        context.read<IntelligenceProvider>().updateFootballDataApiKey(v);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Football-Data API key saved (restart app to apply)',
-            ),
+            content: Text('Football-Data API key saved and active'),
           ),
         );
         setState(() {
@@ -192,6 +196,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (ok != true || !mounted) return;
         await StorageService.deleteFootballDataApiKey();
         if (!mounted) return;
+        context.read<IntelligenceProvider>().updateFootballDataApiKey(null);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Football-Data API key removed')),
         );
@@ -659,6 +664,105 @@ class _BankrollSectionState extends State<_BankrollSection> {
         ElevatedButton(
           onPressed: _save,
           child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _NotificationsSection extends StatefulWidget {
+  const _NotificationsSection();
+  @override
+  State<_NotificationsSection> createState() =>
+      _NotificationsSectionState();
+}
+
+class _NotificationsSectionState extends State<_NotificationsSection> {
+  late bool _kickoff;
+  late bool _drift;
+  late bool _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _kickoff = StorageService.getNotifKickoffEnabled();
+    _drift = StorageService.getNotifDriftEnabled();
+    _value = StorageService.getNotifValueEnabled();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.notifications_outlined, color: AppTheme.primary),
+            SizedBox(width: 8),
+            Text(
+              'Notifications',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          activeThumbColor: AppTheme.primary,
+          dense: true,
+          title: const Text(
+            'Kickoff reminders',
+            style: TextStyle(color: Colors.white, fontSize: 13),
+          ),
+          subtitle: Text(
+            '24h / 1h / 15min before kickoff',
+            style: TextStyle(color: Colors.grey[500], fontSize: 11),
+          ),
+          value: _kickoff,
+          onChanged: (v) {
+            setState(() => _kickoff = v);
+            StorageService.saveNotifKickoffEnabled(v);
+          },
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          activeThumbColor: AppTheme.primary,
+          dense: true,
+          title: const Text(
+            'Odds drift alerts',
+            style: TextStyle(color: Colors.white, fontSize: 13),
+          ),
+          subtitle: Text(
+            'Significant movement (>5%) on watched matches',
+            style: TextStyle(color: Colors.grey[500], fontSize: 11),
+          ),
+          value: _drift,
+          onChanged: (v) {
+            setState(() => _drift = v);
+            StorageService.saveNotifDriftEnabled(v);
+          },
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          activeThumbColor: AppTheme.primary,
+          dense: true,
+          title: const Text(
+            'VALUE signal alerts',
+            style: TextStyle(color: Colors.white, fontSize: 13),
+          ),
+          subtitle: Text(
+            "Claude detects a new value recommendation",
+            style: TextStyle(color: Colors.grey[500], fontSize: 11),
+          ),
+          value: _value,
+          onChanged: (v) {
+            setState(() => _value = v);
+            StorageService.saveNotifValueEnabled(v);
+          },
         ),
       ],
     );

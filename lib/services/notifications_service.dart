@@ -4,6 +4,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../models/match.dart';
 import '../models/odds_snapshot.dart';
+import 'storage_service.dart';
 
 class NotificationsService {
   static final FlutterLocalNotificationsPlugin _plugin =
@@ -58,6 +59,7 @@ class NotificationsService {
   /// Past times are skipped silently. Notification IDs are deterministic
   /// (matchId.hashCode + offset seconds) so they can be cancelled cleanly.
   static Future<void> scheduleKickoffReminders(Match match) async {
+    if (!StorageService.getNotifKickoffEnabled()) return;
     if (!_initialized) await init();
     final id = match.id.hashCode;
 
@@ -101,6 +103,7 @@ class NotificationsService {
 
   /// Immediate drift alert for a watched match whose odds shifted.
   static Future<void> showDriftAlert(Match match, OddsDrift drift) async {
+    if (!StorageService.getNotifDriftEnabled()) return;
     if (!_initialized) await init();
     final dom = drift.dominantDrift;
     final sign = dom.percent > 0 ? '+' : '';
@@ -114,6 +117,7 @@ class NotificationsService {
 
   /// Immediate VALUE alert when Claude returns VALUE in Analysis.
   static Future<void> showValueAlert(Match match) async {
+    if (!StorageService.getNotifValueEnabled()) return;
     if (!_initialized) await init();
     await _plugin.show(
       match.id.hashCode + 1,

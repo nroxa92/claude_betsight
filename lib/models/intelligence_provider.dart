@@ -2,10 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../services/ball_dont_lie_service.dart';
+import '../services/football_data_service.dart';
 import '../services/intelligence_aggregator.dart';
+import '../services/reddit_monitor.dart';
 import '../services/storage_service.dart';
 import 'intelligence_report.dart';
 import 'match.dart';
+import 'telegram_provider.dart';
 
 class IntelligenceProvider extends ChangeNotifier {
   final Map<String, IntelligenceReport> _reports = {};
@@ -13,6 +17,13 @@ class IntelligenceProvider extends ChangeNotifier {
   String? _error;
   Timer? _autoRefreshTimer;
   IntelligenceAggregator? _aggregator;
+
+  // Keep service refs so the aggregator can be rebuilt on-the-fly (e.g.
+  // when the Football-Data API key changes in Settings).
+  FootballDataService? _footballService;
+  BallDontLieService? _nbaService;
+  RedditMonitor? _redditMonitor;
+  TelegramProvider? _telegramProvider;
 
   IntelligenceProvider() {
     for (final report in StorageService.getAllReports()) {
@@ -24,6 +35,48 @@ class IntelligenceProvider extends ChangeNotifier {
   /// Until called, generateReport will surface a configuration error.
   void wireAggregator(IntelligenceAggregator aggregator) {
     _aggregator = aggregator;
+  }
+
+  /// Alternative wiring that retains service refs so the aggregator can be
+  /// rebuilt without recreating the provider (used for dynamic API key
+  /// changes in Settings).
+  void wireServices({
+    required FootballDataService? footballService,
+    required BallDontLieService nbaService,
+    required RedditMonitor redditMonitor,
+    required TelegramProvider telegramProvider,
+  }) {
+    _footballService = footballService;
+    _nbaService = nbaService;
+    _redditMonitor = redditMonitor;
+    _telegramProvider = telegramProvider;
+    _rebuildAggregator();
+  }
+
+  void _rebuildAggregator() {
+    if (_nbaService == null ||
+        _redditMonitor == null ||
+        _telegramProvider == null) {
+      return;
+    }
+    _aggregator = IntelligenceAggregator(
+      footballService: _footballService,
+      nbaService: _nbaService,
+      redditMonitor: _redditMonitor,
+      telegramProvider: _telegramProvider!,
+    );
+  }
+
+  /// Replace Football-Data API key without restarting the app. Rebuilds
+  /// the aggregator so the next report generation uses the fresh key.
+  void updateFootballDataApiKey(String? newKey) {
+    if (newKey == null || newKey.isEmpty) {
+      _footballService = null;
+    } else {
+      _footballService = FootballDataService()..setApiKey(newKey);
+    }
+    _rebuildAggregator();
+    notifyListeners();
   }
 
   IntelligenceReport? reportFor(String matchId) => _reports[matchId];

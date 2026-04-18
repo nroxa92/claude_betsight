@@ -24,13 +24,31 @@ class FootballDataService {
   bool get hasApiKey => _apiKey.isNotEmpty;
   void setApiKey(String key) => _apiKey = key;
 
-  /// Normalises team name for fuzzy matching with Odds API names.
-  /// Strips common suffixes (FC, AFC, CF, ...) + non-alphabetic chars.
-  static String _normalize(String name) => name
-      .toLowerCase()
-      .replaceAll(RegExp(r'\s+(fc|cf|afc|sc|ac|cd|cb|sl)\b'), '')
-      .replaceAll(RegExp(r'[^a-z\s]'), '')
-      .trim();
+  /// Tokenises team name into a set of meaningful words for fuzzy
+  /// matching with Odds API names. Strips club suffixes (FC, AFC, CF,
+  /// SC, AC, CD, CB, SL, B.K.), non-alpha chars, and tokens shorter
+  /// than 3 letters (drops "cd", "al", ...).
+  ///
+  /// "Liverpool FC" → {"liverpool"}
+  /// "Manchester United" → {"manchester", "united"}
+  /// "Real Madrid CF" → {"real", "madrid"}
+  static Set<String> _tokenize(String name) {
+    final cleaned = name
+        .toLowerCase()
+        .replaceAll(
+            RegExp(r'\s+(fc|cf|afc|sc|ac|cd|cb|sl|b\.?k\.?)\b'), '')
+        .replaceAll(RegExp(r'[^a-z\s]'), '')
+        .trim();
+    return cleaned
+        .split(RegExp(r'\s+'))
+        .where((t) => t.length >= 3)
+        .toSet();
+  }
+
+  /// Number of shared tokens between two sets — the matching score.
+  static int _matchScore(Set<String> a, Set<String> b) {
+    return a.intersection(b).length;
+  }
 
   Future<FootballDataSignal> getSignalForMatch(Match match) async {
     if (!hasApiKey) {
@@ -76,24 +94,38 @@ class FootballDataService {
     final matchesData = json.decode(matchesResp.body) as Map<String, dynamic>;
     final fdMatches = (matchesData['matches'] as List<dynamic>?) ?? [];
 
-    final nHome = _normalize(match.home);
-    final nAway = _normalize(match.away);
+    final oddsHomeTokens = _tokenize(match.home);
+    final oddsAwayTokens = _tokenize(match.away);
+
     Map<String, dynamic>? fdMatch;
+    var bestScore = 0;
     for (final m in fdMatches) {
       final map = m as Map<String, dynamic>;
-      final fdHome =
-          _normalize((map['homeTeam'] as Map)['name'] as String);
-      final fdAway =
-          _normalize((map['awayTeam'] as Map)['name'] as String);
-      if ((fdHome.contains(nHome) || nHome.contains(fdHome)) &&
-          (fdAway.contains(nAway) || nAway.contains(fdAway))) {
-        fdMatch = map;
-        break;
+      final fdHomeTokens =
+          _tokenize((map['homeTeam'] as Map)['name'] as String);
+      final fdAwayTokens =
+          _tokenize((map['awayTeam'] as Map)['name'] as String);
+
+      final homeScore = _matchScore(oddsHomeTokens, fdHomeTokens);
+      final awayScore = _matchScore(oddsAwayTokens, fdAwayTokens);
+
+      if (homeScore >= 1 && awayScore >= 1) {
+        final total = homeScore + awayScore;
+        if (total > bestScore) {
+          bestScore = total;
+          fdMatch = map;
+        }
       }
     }
 
     if (fdMatch == null) {
       throw FootballDataException('Match not found in Football-Data');
+    }
+    // Require at least 2 total token matches to dodge "Manchester"-only
+    // collisions between "Manchester United" and "Manchester City".
+    if (bestScore < 2) {
+      throw FootballDataException(
+          'Match not found (ambiguous team names)');
     }
 
     final fdMatchId = fdMatch['id'];

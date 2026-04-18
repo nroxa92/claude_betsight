@@ -72,6 +72,15 @@ class Bet {
 
   double get impliedProbability => 1 / odds;
 
+  /// True if stake was placed after kickoff (live bet).
+  /// Bets without matchStartedAt data are treated as pre-match (backward-compat).
+  bool get isLiveBet {
+    if (matchStartedAt == null) return false;
+    return placedAt.isAfter(matchStartedAt!);
+  }
+
+  bool get isPreMatchBet => !isLiveBet;
+
   Bet copyWith({
     BetStatus? status,
     DateTime? settledAt,

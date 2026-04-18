@@ -1026,16 +1026,169 @@
 
 ---
 
+---
+---
+
+## Session 8: 2026-04-18 — Stabilization + P&L Breakdown + Filter/Search
+
+**Kontekst:** S7 je ostavio 10 Identified Issues u backlog-u. S8 rješava 5 high-impact issues (auto-refresh wire, LIVE tier filtering, FD dynamic re-wire, notifications per-type, FD fuzzy match) i dodaje dva CoinSight S10-inspired polish feature-a (per-sport P&L breakdown, filter/search u Bets screenu). Minor bump na 3.1.0+9 — mix stabilization + new functionality.
+
+---
+
+### Task 1 — IntelligenceProvider Auto-Refresh Wire-up
+**Status:** Completed
+
+**Opis:** MainNavigation konvertiran iz StatelessWidget u StatefulWidget s `_autoRefreshStarted` guard flagom + `didChangeDependencies` koji nakon post-frame callback-a poziva `IntelligenceProvider.startAutoRefresh` s callback-om koji vraća watched matches listu iz MatchesProvider-a. Timer.periodic(1h) iz S6 sada stvarno radi — gated na `watched.isNotEmpty` unutar timer callback-a. Dispose je već pokriven kroz postojeći IntelligenceProvider.dispose override (cancela timer).
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `pubspec.yaml` — version bump na `3.1.0+9`.
+- `lib/main.dart` — MainNavigation → StatefulWidget s `_MainNavigationState`; `didChangeDependencies` + post-frame wire up + guard flag; build wrap nepromijenjen.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 2 — LIVE Tier Filtering (matchStartedAt)
+**Status:** Completed
+
+**Opis:** Bet model (koji je već imao `matchStartedAt` field iz S3) dobio getter-e `isLiveBet` (placedAt > matchStartedAt) i `isPreMatchBet` (fallback). BetEntrySheet detektira trenutni tier — ako je LIVE, postavlja `matchStartedAt = now - 1min` (osigurava isLiveBet true); inače koristi `prefilledMatch.commenceTime`. BetsScreen tier-aware filter (`_filterBetsForTier`) u `_buildOpenTab`/`_buildSettledTab` — PRE-MATCH pokazuje samo pre-match bets, LIVE samo live. LIVE empty state ima drugačiju poruku. Accumulator tier vraća empty (koristi poseban view).
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/models/bet.dart` — dodani `isLiveBet`/`isPreMatchBet` getter-i (backward-compat: bez matchStartedAt → pre-match).
+- `lib/widgets/bet_entry_sheet.dart` — uvozi TierProvider; `_save` detektira tier i postavlja matchStartedAt.
+- `lib/screens/bets_screen.dart` — `_buildRegularView` wrapped u Consumer<TierProvider>; `_filterBetsForTier` helper; `_buildOpenTab`/`_buildSettledTab` prima tier i primjenjuje filter.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 3 — Football-Data Dynamic Re-wire
+**Status:** Completed
+
+**Opis:** IntelligenceProvider refaktoriran — umjesto `wireAggregator(aggregator)` sada `wireServices(footballService, nbaService, redditMonitor, telegramProvider)` drži individualne refove kao fieldove i gradi aggregator interno kroz privatni `_rebuildAggregator`. Nova `updateFootballDataApiKey(String? newKey)` metoda zamijeni FD service (null za delete) i rebuild-a aggregator + notifyListeners — sljedeći report generation koristi svjež key bez app restart-a. Settings Football-Data sekcija onSave/onRemove sada poziva `context.read<IntelligenceProvider>().updateFootballDataApiKey(...)` i SnackBar poruka je ažurirana ("saved and active" umjesto "restart to apply").
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/models/intelligence_provider.dart` — uvozi 4 servisa + TelegramProvider; dodana polja za service refs; `wireServices` + `_rebuildAggregator` + `updateFootballDataApiKey`; staru `wireAggregator` metodu ostavio radi compat-a.
+- `lib/main.dart` — MultiProvider create koristi `wireServices` umjesto eksplicitnog `IntelligenceAggregator` instanciranja; uvoz `intelligence_aggregator.dart` uklonjen (nije više potreban ovdje).
+- `lib/screens/settings_screen.dart` — uvozi IntelligenceProvider; Football-Data onSave/onRemove pozivaju `updateFootballDataApiKey`; SnackBar poruka bez "restart" napomene.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 4 — Notifications Per-Type Enable + Settings UI
+**Status:** Completed
+
+**Opis:** 3 nova bool field-a u settings boxu (kickoff/drift/value; default true). NotificationsService.scheduleKickoffReminders/showDriftAlert/showValueAlert sada early-return kad je odgovarajući flag false. Nova privatna klasa `_NotificationsSection` StatefulWidget u Settings screenu (izmedu Bankroll i Telegram) — 3 SwitchListTile-a s title/subtitle, persist-a u Hive on change. AnimatedSwitcher nije potreban jer SwitchListTile ima vlastitu animaciju.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/services/storage_service.dart` — 3 nova constanta + `getNotif*Enabled`/`saveNotif*Enabled` pair-a.
+- `lib/services/notifications_service.dart` — uvozi StorageService; svaka javna metoda early-return na odgovarajući flag.
+- `lib/screens/settings_screen.dart` — nova privatna klasa `_NotificationsSection` + ubacivanje u ListView izmedu Bankroll i Telegram sekcije.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 5 — Football-Data Fuzzy Match Improvement (Token-Based)
+**Status:** Completed
+
+**Opis:** Naivni substring matching zamijenjen token-based algoritmom. `_tokenize(String)` vraća Set<String>: lowercase → strip club suffixes (FC/AFC/CF/SC/AC/CD/CB/SL/B.K.) → strip non-alpha → split whitespace → filter ≥3 char. `_matchScore(a, b)` vraća veličinu preseka. U `getSignalForMatch`, loop kroz FD matches tražeći best score (zbroj home + away score-a) uz guard da obje strane imaju bar 1 token match. Dodatni safety: `bestScore < 2` throw-a "ambiguous team names" — sprečava "Manchester" collision izmedu United i City (svaki bi dao 1+1=2, ali "Manchester United" vs "Manchester United FC" daje 2+2=4, čime best uvijek pobijedi nad ambiguous).
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/services/football_data_service.dart` — `_normalize` zamijenjen s `_tokenize` + `_matchScore` helperima; `getSignalForMatch` lookup loop iterira sve matches, vodi bestScore, throws kad je <2.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 6 — Per-Sport P&L Breakdown
+**Status:** Completed
+
+**Opis:** SportPl mali model + `BetsProvider.perSportBreakdown` getter koji iterira `Sport.values`, filtrira settled bets po sportu, računa won/lost/totalStake/totalProfit/roiPercent. PlSummaryWidget dobio treći Card (`_PerSportCard`) ispod EquityCurve s tabular layoutom: header row (Sport/Bets/Win%/ROI/P/L u greys 10pt) + Divider + per-sport rows s sport icon + display + brojkama; ROI i P/L kolonu boje green/red/grey ovisno o predznaku.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/models/sport_pl.dart` — SportPl model s `winRate` getter-om.
+
+**Ažurirani fajlovi:**
+- `lib/models/bets_provider.dart` — uvozi sport + sport_pl; `perSportBreakdown` getter (skip sportova bez bets).
+- `lib/widgets/pnl_summary.dart` — uvozi sport + sport_pl; conditional render `_PerSportCard` ispod EquityCurve; nova privatna klasa `_PerSportCard` s static `_headerStyle`.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 7 — Filter/Search in Bets Screen
+**Status:** Completed
+
+**Opis:** BetsProvider proširen s filter state-om — `_filterSports` Set, `_filterStatuses` Set, `_filterFromDate`/`_filterToDate`, `_searchText`. Toggle/setter metode + `clearFilters` + `applyFilters(source)` koja filtrira list. `hasActiveFilters` getter. Novi BetsFilterBar widget — TextField search (s clear icon kad ima text) + horizontal ListView 3 ActionChip-a (Sport/Status/Date) + conditional Clear chip. Filter chips otvaraju modal bottom sheet-ove (Sport/Status koriste CheckboxListTile per option, Date koristi `showDateRangePicker`). BetsScreen `_buildOpenTab`/`_buildSettledTab` sada apliciraju `bets.applyFilters(_filterBetsForTier(...))` umjesto direct tier filter, empty state poruka razlikuje "no filters match" od originalnih.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/widgets/bets_filter_bar.dart` — BetsFilterBar StatefulWidget + 3 modal pickerа.
+
+**Ažurirani fajlovi:**
+- `lib/models/bets_provider.dart` — filter state + getteri/metode/applyFilters.
+- `lib/screens/bets_screen.dart` — uvozi BetsFilterBar; `_buildRegularView` ubacuje filter bar izmedu PlSummary i TabBar; `_buildOpenTab`/`_buildSettledTab` koriste applyFilters i diferencirane empty state poruke.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 8 — Polish + Final Verification + Issue Cleanup
+**Status:** Completed
+
+**Opis:** Tri male polish promjene + cleanup riješenih issues iz backlog-a. (1) Accumulator stake TextField sad ima `errorText: _stakeError` koji se postavlja na "Enter a positive stake" kad je input ne-prazan ali ≤0 — daje vizualni feedback (red border) prije nego što korisnik klikne Save. (2) OddsMovementChart i EquityCurveChart sad čitaju `MediaQuery.of(context).size.width` i smanjuju `reservedSize` + `fontSize` + decimal precision kad je ekran <360dp. (3) Test wrap dobio IntelligenceProvider (zbog auto-refresh wire-up u MainNavigation iz Task 1). Iz Identified Issues uklonjeno **7 unosova** koji su riješeni u S2/S5.5/S8: FD restart, auto-refresh, FD fuzzy match, LIVE tier, notifications per-type, stake validation, chart labels.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows, flutter build apk --debug.
+
+**Ažurirani fajlovi:**
+- `lib/screens/accumulator_builder_screen.dart` — `_stakeError` field; TextField errorText + onChanged validacija (empty → null, value≤0 → error, valid → null).
+- `lib/widgets/charts/odds_movement_chart.dart` — responsive `leftReserved`/`labelFontSize` + manje decimala na malim uređajima.
+- `lib/widgets/charts/equity_curve_chart.dart` — analogno responsive sizing za leftTitles + bottomTitles.
+- `test/widget_test.dart` — dodan IntelligenceProvider u test wrap (jer MainNavigation didChangeDependencies čita iz njega).
+
+**Cleanup riješenih issues** (uklonjeno iz `## Identified Issues`):
+- ~~Football-Data API key change requires app restart~~ → S8 Task 3
+- ~~IntelligenceProvider auto-refresh nije wired iz UI-ja~~ → S8 Task 1
+- ~~Football-Data team name fuzzy matching edge cases~~ → S8 Task 5
+- ~~LIVE tier filtering nedostaje matchStartedAt~~ → S8 Task 2
+- ~~Notifications per-type enable nije implementiran~~ → S8 Task 4
+- ~~Accumulator stake validacija prihvata invalid input~~ → S8 Task 8
+- ~~Chart widget axis labele mogu se preklapati~~ → S8 Task 8
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan, flutter build apk --debug uspješan.
+
+---
+
+### Finalna verifikacija Session 8:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build windows — uspješan
+- flutter build apk --debug — uspješan
+- APK u rootu: betsight-v3.1.0.apk (NOT in git — `.gitignore` `*.apk`)
+- Verzija: **3.1.0+9** (minor bump — mix stabilization + new functionality)
+- Identified Issues: smanjeno s 10 na **3**
+- Git: Claude Code NE commit-a/push-a — developer preuzima
+
+---
+
 ## Identified Issues
 
 - **Telegram Bot API limitation:** Bot prima poruke samo iz kanala gdje je dodan kao član. Public tipster kanali koji ne dozvoljavaju bot-ove nisu dostupni kroz Bot API. Za full public channel access trebala bi MTProto migracija u kasnijoj sesiji.
-- **Football-Data API key change requires app restart:** Aggregator se konstruira jednom u MultiProvider create lambda-i s tada-postojećim FD ključem. Promjena ključa u Settings se persistira u Hive ali ne re-wire-a aggregator do sljedećeg app pokretanja. SnackBar to spominje. Dynamic re-wire kandidat za S6.5.
-- **IntelligenceProvider auto-refresh nije wired iz UI-ja:** `startAutoRefresh(watchedProvider)` postoji kao API ali se nigdje ne poziva — auto 1h Timer treba explicit poziv s callback-om koji vraća watched matches. Trenutno radi samo on-demand refresh (FAB u Dashboardu + per-card Generate). Wire kandidat za S6.5.
-- **Football-Data team name fuzzy matching edge cases:** Naivna substring usporedba nakon `_normalize`. Imena poput "Manchester United" / "Manchester City" mogu se zbrojiti ako Odds API koristi samo "Manchester". Nije pokriveno disambiguity testovima — može dati pogrešan match u edge slučajevima. Za real-world test pratiti.
-- **LIVE tier filtering nedostaje matchStartedAt na Bet model:** Bets screen u LIVE tier-u trenutno pokazuje sve klasične bet-ove (isto kao PRE-MATCH). Strict separation traži `placedAt > matchStartedAt` filter što zahtijeva matchStartedAt field na Bet modelu (kandidat za S7.5).
-- **Notifications per-type enable nije implementiran:** Settings nema toggle za uključi/isključi pojedine notification kanale. Trenutno su svi always-on. SwitchListTile sekcija "Notifications" preskočena u Tasku 10 — kandidat za S7.5.
-- **Accumulator stake validacija prihvata invalid input:** TextField za stake u BuilderScreen ne odbija negative ili zero — Save button je gated na `stake > 0` ali UX bi mogao bolje dati feedback (red border kad stake ≤ 0).
-- **Chart widget axis labele mogu se preklapati na malim uređajima:** OddsMovementChart i EquityCurveChart leftTitles 50px reservedSize može biti prevelika za uređaje <360dp. Real-world test treba pratiti.
 - **MatchDetailScreen Charts tab ne pokriva tennis:** Charts tab pokazuje OddsMovement (uvijek) i FormChart (samo ako ima FootballDataSignal). NbaStatsSignal i tennis nisu vizualizirani. Manja vrijednost za tennis jer nema dedicated tennis service.
 - **Match name collision: Material `Accumulator` vs naš model:** Nije bug, samo coding-style napomena — `import 'package:flutter/material.dart' hide Accumulator;` korišteno u `accumulator_builder_screen.dart` i `accumulator_card.dart`. Buduće rename na `BetAccumulator` može biti čišće.
 

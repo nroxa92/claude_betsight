@@ -30,6 +30,9 @@ class StorageService {
   static const _matchNotesBox = 'match_notes';
   static const _footballDataApiKeyField = 'football_data_api_key';
   static const _currentTierField = 'current_tier';
+  static const _notifKickoffEnabledField = 'notif_kickoff_enabled';
+  static const _notifDriftEnabledField = 'notif_drift_enabled';
+  static const _notifValueEnabledField = 'notif_value_enabled';
   static const _cacheEntryKey = 'all_matches';
   static const _cacheTtlMinutesField = 'cache_ttl_minutes';
   static const _lastCleanupField = 'last_cleanup_at';
@@ -242,6 +245,21 @@ class StorageService {
       _box.get(_currentTierField) as String?;
   static Future<void> saveCurrentTier(String tierName) =>
       _box.put(_currentTierField, tierName);
+
+  static bool getNotifKickoffEnabled() =>
+      (_box.get(_notifKickoffEnabledField) as bool?) ?? true;
+  static Future<void> saveNotifKickoffEnabled(bool v) =>
+      _box.put(_notifKickoffEnabledField, v);
+
+  static bool getNotifDriftEnabled() =>
+      (_box.get(_notifDriftEnabledField) as bool?) ?? true;
+  static Future<void> saveNotifDriftEnabled(bool v) =>
+      _box.put(_notifDriftEnabledField, v);
+
+  static bool getNotifValueEnabled() =>
+      (_box.get(_notifValueEnabledField) as bool?) ?? true;
+  static Future<void> saveNotifValueEnabled(bool v) =>
+      _box.put(_notifValueEnabledField, v);
 
   static List<Accumulator> getAllAccumulators() {
     final list = <Accumulator>[];

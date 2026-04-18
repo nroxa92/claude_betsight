@@ -24,6 +24,10 @@ class OddsMovementChart extends StatelessWidget {
       );
     }
 
+    final isSmall = MediaQuery.of(context).size.width < 360;
+    final leftReserved = isSmall ? 32.0 : 40.0;
+    final labelFontSize = isSmall ? 9.0 : 10.0;
+
     final baseTime = snapshots.first.capturedAt.millisecondsSinceEpoch;
 
     final homeSpots = <FlSpot>[];
@@ -68,10 +72,10 @@ class OddsMovementChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 40,
+              reservedSize: leftReserved,
               getTitlesWidget: (value, meta) => Text(
-                value.toStringAsFixed(2),
-                style: const TextStyle(fontSize: 10),
+                value.toStringAsFixed(isSmall ? 1 : 2),
+                style: TextStyle(fontSize: labelFontSize),
               ),
             ),
           ),
@@ -81,7 +85,7 @@ class OddsMovementChart extends StatelessWidget {
               reservedSize: 24,
               getTitlesWidget: (value, meta) => Text(
                 '${value.toStringAsFixed(0)}h',
-                style: const TextStyle(fontSize: 10),
+                style: TextStyle(fontSize: labelFontSize),
               ),
             ),
           ),

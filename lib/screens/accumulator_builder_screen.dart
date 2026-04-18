@@ -23,6 +23,7 @@ class _AccumulatorBuilderScreenState
     extends State<AccumulatorBuilderScreen> {
   final TextEditingController _stakeCtrl = TextEditingController();
   bool _stakeBound = false;
+  String? _stakeError;
 
   @override
   void dispose() {
@@ -226,10 +227,22 @@ class _AccumulatorBuilderScreenState
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                 ],
-                decoration: const InputDecoration(labelText: 'Stake'),
+                decoration: InputDecoration(
+                  labelText: 'Stake',
+                  errorText: _stakeError,
+                ),
                 onChanged: (v) {
                   final value = double.tryParse(v.replaceAll(',', '.'));
-                  if (value != null) accas.setDraftStake(value);
+                  setState(() {
+                    if (v.trim().isEmpty) {
+                      _stakeError = null;
+                    } else if (value == null || value <= 0) {
+                      _stakeError = 'Enter a positive stake';
+                    } else {
+                      _stakeError = null;
+                    }
+                  });
+                  accas.setDraftStake(value ?? 0);
                 },
               ),
               const SizedBox(height: 12),

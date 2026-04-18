@@ -39,6 +39,10 @@ class EquityCurveChart extends StatelessWidget {
     final positive = running >= 0;
     final lineColor = positive ? Colors.green : Colors.red;
 
+    final isSmall = MediaQuery.of(context).size.width < 360;
+    final leftReserved = isSmall ? 40.0 : 50.0;
+    final labelFontSize = isSmall ? 8.0 : 9.0;
+
     return LineChart(
       LineChartData(
         lineBarsData: [
@@ -58,10 +62,10 @@ class EquityCurveChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 50,
+              reservedSize: leftReserved,
               getTitlesWidget: (value, meta) => Text(
                 '${value.toStringAsFixed(0)}$currency',
-                style: const TextStyle(fontSize: 9),
+                style: TextStyle(fontSize: labelFontSize),
               ),
             ),
           ),
@@ -71,7 +75,7 @@ class EquityCurveChart extends StatelessWidget {
               reservedSize: 20,
               getTitlesWidget: (value, meta) => Text(
                 '#${value.toInt()}',
-                style: const TextStyle(fontSize: 9),
+                style: TextStyle(fontSize: labelFontSize),
               ),
             ),
           ),
