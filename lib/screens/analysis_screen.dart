@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/analysis_provider.dart';
+import '../models/recommendation.dart';
 import '../theme/app_theme.dart';
+import '../widgets/bet_entry_sheet.dart';
 import '../widgets/chat_bubble.dart';
 
 class AnalysisScreen extends StatefulWidget {
@@ -86,9 +88,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                             return const _TypingIndicator();
                           }
                           final m = p.messages[i];
-                          return ChatBubble(
-                            text: m.content,
-                            isUser: m.role == 'user',
+                          final isUser = m.role == 'user';
+                          final isValueResponse = !isUser &&
+                              parseRecommendationType(m.content) ==
+                                  RecommendationType.value;
+                          return Column(
+                            crossAxisAlignment: isUser
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            children: [
+                              ChatBubble(text: m.content, isUser: isUser),
+                              if (isValueResponse) _buildLogBetButton(p),
+                            ],
                           );
                         },
                       ),
@@ -165,6 +176,30 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildLogBetButton(AnalysisProvider p) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 48, 12),
+      child: OutlinedButton.icon(
+        onPressed: () {
+          final prefilled = p.stagedMatches.isNotEmpty
+              ? p.stagedMatches.first
+              : null;
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            builder: (_) => BetEntrySheet(prefilledMatch: prefilled),
+          );
+        },
+        icon: const Icon(Icons.receipt_long),
+        label: const Text('Log this as a bet'),
       ),
     );
   }

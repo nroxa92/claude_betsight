@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:betsight/main.dart';
 import 'package:betsight/models/analysis_provider.dart';
+import 'package:betsight/models/bets_provider.dart';
 import 'package:betsight/models/matches_provider.dart';
 import 'package:betsight/models/navigation_controller.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ Widget _wrap() {
       ChangeNotifierProvider(create: (_) => NavigationController()),
       ChangeNotifierProvider(create: (_) => MatchesProvider()),
       ChangeNotifierProvider(create: (_) => AnalysisProvider()),
+      ChangeNotifierProvider(create: (_) => BetsProvider()),
     ],
     child: const BetSightApp(),
   );
@@ -25,12 +27,15 @@ void main() {
     final tempDir = Directory.systemTemp.createTempSync('betsight_test');
     Hive.init(tempDir.path);
     await Hive.openBox('settings');
+    await Hive.openBox('analysis_logs');
+    await Hive.openBox('bets');
   });
 
   testWidgets('BetSightApp renders with bottom navigation', (tester) async {
     await tester.pumpWidget(_wrap());
     expect(find.text('Matches'), findsWidgets);
     expect(find.text('Analysis'), findsWidgets);
+    expect(find.text('Bets'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
   });
 
@@ -43,6 +48,10 @@ void main() {
     await tester.tap(find.text('Analysis').last);
     await tester.pumpAndSettle();
     expect(find.text('Anthropic API key required'), findsOneWidget);
+
+    await tester.tap(find.text('Bets').last);
+    await tester.pumpAndSettle();
+    expect(find.text('No open bets — tap + to log one'), findsOneWidget);
 
     await tester.tap(find.text('Settings').last);
     await tester.pumpAndSettle();

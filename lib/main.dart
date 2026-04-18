@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'models/analysis_provider.dart';
+import 'models/bets_provider.dart';
 import 'models/matches_provider.dart';
 import 'models/navigation_controller.dart';
 import 'screens/analysis_screen.dart';
+import 'screens/bets_screen.dart';
 import 'screens/matches_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/storage_service.dart';
@@ -23,6 +25,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => NavigationController()),
         ChangeNotifierProvider(create: (_) => MatchesProvider()),
         ChangeNotifierProvider(create: (_) => AnalysisProvider()),
+        ChangeNotifierProvider(create: (_) => BetsProvider()),
       ],
       child: const BetSightApp(),
     ),
@@ -56,6 +59,7 @@ class MainNavigation extends StatelessWidget {
             children: const [
               MatchesScreen(),
               AnalysisScreen(),
+              BetsScreen(),
               SettingsScreen(),
             ],
           ),
@@ -72,6 +76,11 @@ class MainNavigation extends StatelessWidget {
                 icon: Icon(Icons.auto_awesome_outlined),
                 activeIcon: Icon(Icons.auto_awesome),
                 label: 'Analysis',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.receipt_long_outlined),
+                activeIcon: Icon(Icons.receipt_long),
+                label: 'Bets',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.settings_outlined),

@@ -1,22 +1,27 @@
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/analysis_log.dart';
+import '../models/bet.dart';
 
 class StorageService {
   static const _settingsBox = 'settings';
   static const _analysisLogsBox = 'analysis_logs';
+  static const _betsBox = 'bets';
   static const _anthropicApiKeyField = 'anthropic_api_key';
   static const _oddsApiKeyField = 'odds_api_key';
   static const _valuePresetField = 'value_preset';
+  static const _bankrollField = 'bankroll_config';
 
   static Future<void> init() async {
     await Hive.initFlutter();
     await Hive.openBox(_settingsBox);
     await Hive.openBox(_analysisLogsBox);
+    await Hive.openBox(_betsBox);
   }
 
   static Box get _box => Hive.box(_settingsBox);
   static Box get _logsBox => Hive.box(_analysisLogsBox);
+  static Box get _betsBoxRef => Hive.box(_betsBox);
 
   static String? getAnthropicApiKey() =>
       _box.get(_anthropicApiKeyField) as String?;
@@ -53,4 +58,26 @@ class StorageService {
 
   static Future<void> deleteAnalysisLog(String id) => _logsBox.delete(id);
   static Future<int> clearAllAnalysisLogs() => _logsBox.clear();
+
+  static List<Bet> getAllBets() {
+    final maps = _betsBoxRef.values.toList();
+    final bets = <Bet>[];
+    for (final map in maps) {
+      try {
+        bets.add(Bet.fromMap(map as Map<dynamic, dynamic>));
+      } catch (_) {
+        // skip malformed
+      }
+    }
+    return bets;
+  }
+
+  static Future<void> saveBet(Bet bet) =>
+      _betsBoxRef.put(bet.id, bet.toMap());
+  static Future<void> deleteBet(String id) => _betsBoxRef.delete(id);
+
+  static Map<dynamic, dynamic>? getBankrollConfig() =>
+      _box.get(_bankrollField) as Map<dynamic, dynamic>?;
+  static Future<void> saveBankrollConfig(Map<String, dynamic> config) =>
+      _box.put(_bankrollField, config);
 }

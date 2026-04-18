@@ -255,6 +255,115 @@
 
 ---
 
+---
+---
+
+## Session 3: 2026-04-18 — Bet Tracking + Manual Entry + Settlement + Bankroll + P&L Summary
+
+**Kontekst:** S2 završio s working value pipeline-om (filter + markers + logging). S3 zatvara loop: dodaje Bet tracking layer. Korisnik sada može zabilježiti bet (ručno ili iz VALUE preporuke), pratiti ga, zaključiti kao won/lost/void, i pratiti osnovnu P&L statistiku.
+
+---
+
+### Task 1 — Bet Model + BetsProvider + Hive Box
+**Status:** Completed
+
+**Opis:** Data layer za bet tracking. Bet model nosi sport/league/teams/selection/odds/stake + status (pending/won/lost/void_) i lifecycle timestamps (placedAt/settledAt). `actualProfit` getter switch-a po statusu (null za pending, +profit za won, -stake za lost, 0 za void). BankrollConfig drži total/stakeUnit/currency. BetsProvider izlaže openBets/settledBets filtere i P&L kalkulacije (winRate na decisive bets, ROI na settled stake, totalProfit). Novi Hive box `bets` + `bankroll_config` field u settings boxu.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/models/bet.dart` — BetSelection enum (home/draw/away) + BetStatus enum (pending/won/lost/void_; void_ s trailing underscore jer je `void` Dart keyword) + BetSelectionMeta/BetStatusMeta extensions; Bet klasa s 14 polja + copyWith + toMap/fromMap; getteri potentialPayout/potentialProfit/actualProfit/impliedProbability.
+- `lib/models/bankroll.dart` — BankrollConfig (totalBankroll/defaultStakeUnit/currency) + defaultConfig (0/10/EUR) + stakeAsPercentage getter + toMap/fromMap.
+- `lib/models/bets_provider.dart` — BetsProvider ChangeNotifier; konstruktor čita bets i bankroll iz Storage; getteri allBets/openBets (sort po matchStartedAt asc) /settledBets (sort po settledAt desc) /bankroll/error/totalBets/wonBets/lostBets/voidBets/pendingBets/winRate/totalProfit/totalStakedOnSettled/roi; metode addBet/settleBet (s assert da nije pending) /deleteBet/setBankroll.
+
+**Ažurirani fajlovi:**
+- `pubspec.yaml` — version bump na `1.2.0+3`.
+- `lib/services/storage_service.dart` — dodan `_betsBox` constant + `_bankrollField`; `init()` otvara treći box; `_betsBoxRef` getter; `getAllBets` (skip malformed), `saveBet`, `deleteBet`, `getBankrollConfig`, `saveBankrollConfig`.
+- `lib/main.dart` — BetsProvider dodan u MultiProvider nakon AnalysisProvider.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 2 — Bets Screen (4. Tab) + Open/Settled Tabs
+**Status:** Completed
+
+**Opis:** Navigacija proširena s 3 na 4 taba: Matches / Analysis / **Bets** / Settings (Settings se pomakla s indeksa 2 na 3). BetsScreen koristi SingleTickerProviderStateMixin i TabController(2) za Open / Settled subtabove. BetCard je Dismissible (endToStart, confirm dialog) za swipe-to-delete; tap na pending bet otvara settle bottom sheet (full implementation u Task 4 ali widget već prisutan); StatusChip s ikonama (hourglass/check/close/remove) i bojama (blue/green/red/grey); Settle button (full-width) na pending bet-ovima. Tests ažurirani na 4 taba + dodana tap+verify za Bets empty state.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/widgets/bet_card.dart` — BetCard wrapped u Dismissible (background red s delete ikonom; confirmDismiss → AlertDialog); tap-na-card otvara settle sheet ako pending; layout: header (sport icon + league + StatusChip), teams + Pick row, meta chips (Odds/Stake/Bookmaker), conditional P&L row (s ±predznakom i bojom green/red/grey), conditional Settle button. Privatni `_StatusChip` (boje + ikone po BetStatus) i `_MetaChip` widgeti.
+- `lib/screens/bets_screen.dart` — BetsScreen StatefulWidget s TabController; FAB Icons.add (TODO za Task 3); placeholder SizedBox.shrink() iznad TabBar-a (Task 5 zamjenjuje s PlSummaryWidget); `_buildOpenTab`/`_buildSettledTab` Consumer<BetsProvider> + empty states ("No open bets — tap + to log one" / "No settled bets yet"); `_buildBetList` ListView.builder s BetCard.
+
+**Ažurirani fajlovi:**
+- `lib/main.dart` — uvozi BetsScreen; IndexedStack proširen na 4 children (Bets na indeksu 2, Settings na 3); BottomNavigationBar dobio 4. item s `Icons.receipt_long_outlined`/`Icons.receipt_long` i labelom "Bets".
+- `test/widget_test.dart` — uvozi BetsProvider; provider list proširen; setUpAll otvara `analysis_logs` i `bets` Hive boxove pored `settings`; test "renders" provjerava i "Bets" label; test "switches tabs" tap-a Bets tab i očekuje empty state string.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan.
+
+---
+
+### Task 3 — Manual Bet Entry
+**Status:** Completed
+
+**Opis:** BetEntrySheet bottom sheet (full scrollable, IsScrollControlled true) prima opcionalni `prefilledMatch`/`prefilledSelection`/`prefilledOdds`. Form polja: Sport (DropdownButtonFormField, disabled ako je prefilled), League/Home/Away (TextFormField required), Selection (ChoiceChip Wrap, Draw chip se prikazuje samo kad sport.hasDraw), Odds + Stake (FilteringTextInputFormatter dozvoljava digit/.,), Bookmaker + Notes (optional). Default stake se pre-fillaa iz BetsProvider.bankroll.defaultStakeUnit. Validatori provjeravaju required fields, odds > 1.0, stake > 0, draw + non-soccer mismatch. FAB u Bets tabu otvara prazan sheet; "Log this as a bet" OutlinedButton ispod assistant ChatBubble-a u Analysis-u (samo kad parseRecommendationType vrati VALUE) otvara sheet pre-fillan iz prvog staged matcha.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/widgets/bet_entry_sheet.dart` — BetEntrySheet StatefulWidget; init_state učitava controllere s prefill vrijednostima i bankroll defaultom; `_save` validira form + custom rules (draw+non-soccer, odds, stake), kreira Bet (UUID iz `generateUuid`, status pending, linkedMatchId iz prefilled), poziva `addBet`, zatvara sheet, SnackBar; bottom-sheet drag handle ručka na vrhu, KeyboardAvoiding preko `MediaQuery.viewInsets.bottom`.
+
+**Ažurirani fajlovi:**
+- `lib/screens/bets_screen.dart` — uvozi BetEntrySheet; `_showManualBetEntry` otvara sheet bez prefill-a; FAB sad funkcionalan.
+- `lib/screens/analysis_screen.dart` — uvozi `recommendation.dart` i `bet_entry_sheet.dart`; messages itemBuilder zamjenjuje samostalni ChatBubble s Column[ChatBubble + conditional `_buildLogBetButton`] kad assistant message sadrži VALUE marker; `_buildLogBetButton` otvara BetEntrySheet s prefilledMatch iz `stagedMatches.first` ako postoji.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 4 — Bet Settlement
+**Status:** Completed
+
+**Opis:** Settlement bottom sheet (Won / Lost / Void) je već implementiran u BetCard-u u Tasku 2 — funkcionalno povezan i radi: tap na pending bet ili tap na "Settle" ElevatedButton otvara modal s 3 obojena buttona koji pozivaju `BetsProvider.settleBet(id, status)` + Navigator.pop + SnackBar. Swipe-to-delete (Dismissible endToStart, confirm AlertDialog) također je već u BetCard-u i poziva `deleteBet`. assert u `BetsProvider.settleBet` blokira pokušaj settle-a kao pending. Settled bet automatski izlazi iz Open lista (filter na `status == pending`) i ulazi u Settled (sort settledAt desc), `actualProfit` getter izračunava P/L po novom statusu. Ovaj task je čista verifikacija da sve E2E radi — bez dodatnih izmjena.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:** *(nijedan — funkcionalnost je u potpunosti pokrivena Taskom 2)*
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 5 — Bankroll Management + P&L Summary Widget
+**Status:** Completed
+
+**Opis:** PlSummaryWidget Consumer<BetsProvider> renderira 4 metrik kolone (Total bets, Win rate, ROI, Total P/L) na vrhu Bets screena; sakriven kad totalBets == 0; boje su green ako > threshold, red ako < 0, grey ostalo. Settings dobiva novu Bankroll sekciju iznad About-a: dva TextField-a (Total bankroll + Default stake) s decimal-only inputom + Currency dropdown (EUR/USD/GBP/HRK/CHF/BAM/RSD); dynamic helper text "Default stake: X% of bankroll" + warning kad > 5% ("Industry recommendation: 1-3% per bet"). Save validira (bankroll > 0, stake > 0, stake < bankroll).
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows, flutter build apk --debug.
+
+**Kreirani fajlovi:**
+- `lib/widgets/pnl_summary.dart` — PlSummaryWidget StatelessWidget; conditional render; 4-metric Card s `_Metric` privatnim widgetom (label/value/unit + opcionalna boja).
+
+**Ažurirani fajlovi:**
+- `lib/screens/bets_screen.dart` — uvozi PlSummaryWidget; placeholder SizedBox.shrink() zamijenjen s `const PlSummaryWidget()`.
+- `lib/screens/settings_screen.dart` — uvozi BankrollConfig + BetsProvider; nova privatna klasa `_BankrollSection` (StatefulWidget): controllers iniciraju iz `BetsProvider.bankroll`, `_save` validira granice + poziva `setBankroll` + SnackBar; live-updating "X% of bankroll" helper s warningom kad > 5%; renderira se izmedu Value Bets Filter i About sekcije.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan, flutter build apk --debug uspješan.
+
+---
+
+### Finalna verifikacija Session 3:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build windows — uspješan
+- flutter build apk --debug — uspješan
+- APK u rootu: betsight-v1.2.0.apk (142M, NOT in git — `.gitignore` `*.apk`)
+- Verzija: 1.2.0+3
+- Git: Claude Code NE commit-a/push-a — developer preuzima
+
+---
+
 ## Identified Issues
 
 *No unresolved issues at this time.*
