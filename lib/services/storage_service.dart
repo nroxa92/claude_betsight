@@ -3,9 +3,13 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/analysis_log.dart';
 import '../models/bet.dart';
 import '../models/cached_matches_entry.dart';
+import '../models/football_data_signal.dart';
+import '../models/intelligence_report.dart';
 import '../models/monitored_channel.dart';
+import '../models/nba_stats_signal.dart';
 import '../models/odds_snapshot.dart';
 import '../models/recommendation.dart';
+import '../models/reddit_signal.dart';
 import '../models/tipster_signal.dart';
 
 class StorageService {
@@ -16,6 +20,11 @@ class StorageService {
   static const _oddsSnapshotsBox = 'odds_snapshots';
   static const _oddsCacheBox = 'odds_cache';
   static const _channelsDetailBox = 'monitored_channels_detail';
+  static const _intelligenceReportsBox = 'intelligence_reports';
+  static const _footballSignalsBox = 'football_signals_cache';
+  static const _nbaSignalsBox = 'nba_signals_cache';
+  static const _redditSignalsBox = 'reddit_signals_cache';
+  static const _footballDataApiKeyField = 'football_data_api_key';
   static const _cacheEntryKey = 'all_matches';
   static const _cacheTtlMinutesField = 'cache_ttl_minutes';
   static const _lastCleanupField = 'last_cleanup_at';
@@ -37,6 +46,10 @@ class StorageService {
     await Hive.openBox(_oddsSnapshotsBox);
     await Hive.openBox(_oddsCacheBox);
     await Hive.openBox(_channelsDetailBox);
+    await Hive.openBox(_intelligenceReportsBox);
+    await Hive.openBox(_footballSignalsBox);
+    await Hive.openBox(_nbaSignalsBox);
+    await Hive.openBox(_redditSignalsBox);
   }
 
   static Box get _box => Hive.box(_settingsBox);
@@ -46,6 +59,10 @@ class StorageService {
   static Box get _snapshotsBox => Hive.box(_oddsSnapshotsBox);
   static Box get _cacheBox => Hive.box(_oddsCacheBox);
   static Box get _channelsBox => Hive.box(_channelsDetailBox);
+  static Box get _reportsBox => Hive.box(_intelligenceReportsBox);
+  static Box get _footballBox => Hive.box(_footballSignalsBox);
+  static Box get _nbaBox => Hive.box(_nbaSignalsBox);
+  static Box get _redditBox => Hive.box(_redditSignalsBox);
 
   static String? getAnthropicApiKey() =>
       _box.get(_anthropicApiKeyField) as String?;
@@ -205,6 +222,100 @@ class StorageService {
   static Future<void> deleteMonitoredChannel(String username) =>
       _channelsBox.delete(username);
 
+  static String? getFootballDataApiKey() =>
+      _box.get(_footballDataApiKeyField) as String?;
+  static Future<void> saveFootballDataApiKey(String key) =>
+      _box.put(_footballDataApiKeyField, key);
+  static Future<void> deleteFootballDataApiKey() =>
+      _box.delete(_footballDataApiKeyField);
+
+  static IntelligenceReport? getReport(String matchId) {
+    final map = _reportsBox.get(matchId);
+    if (map == null) return null;
+    try {
+      return IntelligenceReport.fromMap(map as Map<dynamic, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveReport(IntelligenceReport report) =>
+      _reportsBox.put(report.matchId, report.toMap());
+
+  static List<IntelligenceReport> getAllReports() {
+    final list = <IntelligenceReport>[];
+    for (final map in _reportsBox.values) {
+      try {
+        list.add(IntelligenceReport.fromMap(map as Map<dynamic, dynamic>));
+      } catch (_) {
+        // skip malformed
+      }
+    }
+    list.sort((a, b) => b.confluenceScore.compareTo(a.confluenceScore));
+    return list;
+  }
+
+  static Future<void> deleteReport(String matchId) =>
+      _reportsBox.delete(matchId);
+
+  static Future<int> clearOldReports(
+      {Duration keepFor = const Duration(hours: 6)}) async {
+    final cutoff = DateTime.now().subtract(keepFor);
+    final keys = <dynamic>[];
+    for (final key in _reportsBox.keys) {
+      try {
+        final report = IntelligenceReport.fromMap(
+            _reportsBox.get(key) as Map<dynamic, dynamic>);
+        if (report.generatedAt.isBefore(cutoff)) keys.add(key);
+      } catch (_) {
+        keys.add(key);
+      }
+    }
+    for (final k in keys) {
+      await _reportsBox.delete(k);
+    }
+    return keys.length;
+  }
+
+  static FootballDataSignal? getFootballSignal(String matchId) {
+    final map = _footballBox.get(matchId);
+    if (map == null) return null;
+    try {
+      return FootballDataSignal.fromMap(map as Map<dynamic, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveFootballSignal(FootballDataSignal signal) =>
+      _footballBox.put(signal.matchId, signal.toMap());
+
+  static NbaStatsSignal? getNbaSignal(String matchId) {
+    final map = _nbaBox.get(matchId);
+    if (map == null) return null;
+    try {
+      return NbaStatsSignal.fromMap(map as Map<dynamic, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveNbaSignal(NbaStatsSignal signal) =>
+      _nbaBox.put(signal.matchId, signal.toMap());
+
+  static RedditSignal? getRedditSignal(String matchId) {
+    final map = _redditBox.get(matchId);
+    if (map == null) return null;
+    try {
+      return RedditSignal.fromMap(map as Map<dynamic, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveRedditSignal(RedditSignal signal) =>
+      _redditBox.put(signal.matchId, signal.toMap());
+
   /// Migrates legacy `List<String>` channel list (settings box) into
   /// per-channel MonitoredChannel records. No-op if already migrated
   /// (channels box already populated) or if there is nothing to migrate.
@@ -340,6 +451,10 @@ class StorageService {
         'signals_cleaned': 0,
         'snapshots_cleaned': 0,
         'cache_entries_cleaned': 0,
+        'reports_cleaned': 0,
+        'football_cleaned': 0,
+        'nba_cleaned': 0,
+        'reddit_cleaned': 0,
       };
     }
 
@@ -355,11 +470,52 @@ class StorageService {
       cacheEntriesCleaned = 1;
     }
 
+    final reportsCleaned =
+        await clearOldReports(keepFor: const Duration(hours: 6));
+    final footballCleaned = await _purgeOldSignalCache(
+      _footballBox,
+      (m) => FootballDataSignal.fromMap(m).fetchedAt,
+    );
+    final nbaCleaned = await _purgeOldSignalCache(
+      _nbaBox,
+      (m) => NbaStatsSignal.fromMap(m).fetchedAt,
+    );
+    final redditCleaned = await _purgeOldSignalCache(
+      _redditBox,
+      (m) => RedditSignal.fromMap(m).fetchedAt,
+    );
+
     await saveLastCleanupAt(DateTime.now());
     return {
       'signals_cleaned': signalsCleaned,
       'snapshots_cleaned': snapshotsCleaned,
       'cache_entries_cleaned': cacheEntriesCleaned,
+      'reports_cleaned': reportsCleaned,
+      'football_cleaned': footballCleaned,
+      'nba_cleaned': nbaCleaned,
+      'reddit_cleaned': redditCleaned,
     };
+  }
+
+  /// Removes signal cache entries older than 3 days (or unparsable).
+  /// Generic helper used by intelligence signal boxes.
+  static Future<int> _purgeOldSignalCache(
+    Box box,
+    DateTime Function(Map<dynamic, dynamic> map) fetchedAtOf,
+  ) async {
+    final cutoff = DateTime.now().subtract(const Duration(days: 3));
+    final keys = <dynamic>[];
+    for (final key in box.keys) {
+      try {
+        final fetched = fetchedAtOf(box.get(key) as Map<dynamic, dynamic>);
+        if (fetched.isBefore(cutoff)) keys.add(key);
+      } catch (_) {
+        keys.add(key);
+      }
+    }
+    for (final k in keys) {
+      await box.delete(k);
+    }
+    return keys.length;
   }
 }

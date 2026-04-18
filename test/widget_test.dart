@@ -35,6 +35,10 @@ void main() {
     await Hive.openBox('odds_snapshots');
     await Hive.openBox('odds_cache');
     await Hive.openBox('monitored_channels_detail');
+    await Hive.openBox('intelligence_reports');
+    await Hive.openBox('football_signals_cache');
+    await Hive.openBox('nba_signals_cache');
+    await Hive.openBox('reddit_signals_cache');
   });
 
   testWidgets('BetSightApp renders with bottom navigation', (tester) async {

@@ -4,6 +4,7 @@ import '../services/claude_service.dart';
 import '../services/storage_service.dart';
 import 'analysis_log.dart';
 import 'bet.dart';
+import 'intelligence_report.dart';
 import 'match.dart';
 import 'odds_snapshot.dart';
 import 'recommendation.dart';
@@ -159,11 +160,14 @@ Respond in the language the user uses (English, Croatian, or other). Internal re
     List<TipsterSignal>? contextSignals,
     List<Bet>? bettingHistory,
     Map<String, OddsDrift>? driftByMatchId,
+    Map<String, IntelligenceReport>? intelligenceReports,
   }) {
     final hasMatches = contextMatches != null && contextMatches.isNotEmpty;
     final hasSignals = contextSignals != null && contextSignals.isNotEmpty;
     final hasHistory = bettingHistory != null && bettingHistory.isNotEmpty;
-    if (!hasMatches && !hasSignals && !hasHistory) return text;
+    final hasIntel =
+        intelligenceReports != null && intelligenceReports.isNotEmpty;
+    if (!hasMatches && !hasSignals && !hasHistory && !hasIntel) return text;
 
     final buf = StringBuffer();
     if (hasMatches) {
@@ -192,6 +196,12 @@ Respond in the language the user uses (English, Croatian, or other). Internal re
       }
       buf.writeln('[/SELECTED MATCHES]');
       buf.writeln();
+    }
+    if (hasIntel) {
+      for (final report in intelligenceReports.values) {
+        buf.writeln(report.toClaudeContext());
+        buf.writeln();
+      }
     }
     if (hasSignals) {
       buf.writeln('[TIPSTER SIGNALS]');
@@ -246,8 +256,10 @@ Respond in the language the user uses (English, Croatian, or other). Internal re
     }
 
     Map<String, OddsDrift>? drifts;
+    Map<String, IntelligenceReport>? intelReports;
     if (effectiveContext != null) {
       final m = <String, OddsDrift>{};
+      final reports = <String, IntelligenceReport>{};
       for (final match in effectiveContext) {
         final snapshots =
             StorageService.getSnapshotsForMatch(match.id);
@@ -255,8 +267,11 @@ Respond in the language the user uses (English, Croatian, or other). Internal re
           m[match.id] =
               OddsDrift.compute(snapshots.first, snapshots.last);
         }
+        final report = StorageService.getReport(match.id);
+        if (report != null) reports[match.id] = report;
       }
       if (m.isNotEmpty) drifts = m;
+      if (reports.isNotEmpty) intelReports = reports;
     }
 
     final userContent = _buildUserMessage(
@@ -265,6 +280,7 @@ Respond in the language the user uses (English, Croatian, or other). Internal re
       contextSignals: effectiveSignals,
       bettingHistory: history,
       driftByMatchId: drifts,
+      intelligenceReports: intelReports,
     );
     final userMessage = ChatMessage(role: 'user', content: userContent);
     _messages.add(userMessage);

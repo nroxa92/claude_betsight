@@ -22,13 +22,18 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _anthropicController = TextEditingController();
   final TextEditingController _oddsController = TextEditingController();
+  final TextEditingController _footballController = TextEditingController();
   bool _showAnthropic = false;
   bool _showOdds = false;
+  bool _showFootball = false;
+  bool _footballHasKey = false;
+  bool _footballInited = false;
 
   @override
   void dispose() {
     _anthropicController.dispose();
     _oddsController.dispose();
+    _footballController.dispose();
     super.dispose();
   }
 
@@ -47,6 +52,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildAnthropicSection(),
           const SizedBox(height: 24),
           _buildOddsSection(),
+          const SizedBox(height: 24),
+          _buildFootballDataSection(),
           const SizedBox(height: 24),
           const Divider(),
           const SizedBox(height: 16),
@@ -142,6 +149,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SnackBar(content: Text('Odds API key removed')),
         );
         setState(() => _oddsController.clear());
+      },
+    );
+  }
+
+  Widget _buildFootballDataSection() {
+    if (!_footballInited) {
+      _footballInited = true;
+      final stored = StorageService.getFootballDataApiKey();
+      if (stored != null && stored.isNotEmpty) {
+        _footballHasKey = true;
+        _footballController.text = _mask(stored);
+      }
+    }
+    return _ApiKeySection(
+      title: 'Football-Data.org API',
+      icon: Icons.sports_soccer,
+      hint: 'Your football-data.org token',
+      isSet: _footballHasKey,
+      controller: _footballController,
+      obscure: !_showFootball,
+      onToggle: () => setState(() => _showFootball = !_showFootball),
+      onSave: () async {
+        final v = _footballController.text.trim();
+        if (v.isEmpty) return;
+        await StorageService.saveFootballDataApiKey(v);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Football-Data API key saved (restart app to apply)',
+            ),
+          ),
+        );
+        setState(() {
+          _footballHasKey = true;
+          _footballController.text = _mask(v);
+        });
+      },
+      onRemove: () async {
+        final ok = await _confirmRemove('Football-Data API key');
+        if (ok != true || !mounted) return;
+        await StorageService.deleteFootballDataApiKey();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Football-Data API key removed')),
+        );
+        setState(() {
+          _footballHasKey = false;
+          _footballController.clear();
+        });
       },
     );
   }

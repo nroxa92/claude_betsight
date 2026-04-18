@@ -3,9 +3,14 @@ import 'package:provider/provider.dart';
 
 import 'models/analysis_provider.dart';
 import 'models/bets_provider.dart';
+import 'models/intelligence_provider.dart';
 import 'models/matches_provider.dart';
 import 'models/navigation_controller.dart';
 import 'models/telegram_provider.dart';
+import 'services/ball_dont_lie_service.dart';
+import 'services/football_data_service.dart';
+import 'services/intelligence_aggregator.dart';
+import 'services/reddit_monitor.dart';
 import 'screens/analysis_screen.dart';
 import 'screens/bets_screen.dart';
 import 'screens/matches_screen.dart';
@@ -30,6 +35,24 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => AnalysisProvider()),
         ChangeNotifierProvider(create: (_) => BetsProvider()),
         ChangeNotifierProvider(create: (_) => TelegramProvider()),
+        ChangeNotifierProvider(
+          create: (context) {
+            final provider = IntelligenceProvider();
+            final footballKey = StorageService.getFootballDataApiKey();
+            final footballService =
+                (footballKey != null && footballKey.isNotEmpty)
+                    ? (FootballDataService()..setApiKey(footballKey))
+                    : null;
+            final aggregator = IntelligenceAggregator(
+              footballService: footballService,
+              nbaService: BallDontLieService(),
+              redditMonitor: RedditMonitor(),
+              telegramProvider: context.read<TelegramProvider>(),
+            );
+            provider.wireAggregator(aggregator);
+            return provider;
+          },
+        ),
       ],
       child: const BetSightApp(),
     ),

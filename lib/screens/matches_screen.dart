@@ -8,6 +8,7 @@ import '../models/navigation_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/match_card.dart';
 import '../widgets/sport_selector.dart';
+import 'intelligence_dashboard_screen.dart';
 
 class MatchesScreen extends StatefulWidget {
   const MatchesScreen({super.key});
@@ -72,6 +73,7 @@ class _MatchesScreenState extends State<MatchesScreen>
           ),
           const _ApiLimitBanner(),
           const _CachedBadge(),
+          const _IntelligenceShortcut(),
           TabBar(
             controller: _tabController,
             tabs: const [
@@ -298,6 +300,34 @@ class _ApiLimitBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _IntelligenceShortcut extends StatelessWidget {
+  const _IntelligenceShortcut();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<MatchesProvider>(
+      builder: (_, p, child) {
+        final n = p.watchedMatchIds.length;
+        if (n == 0) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: OutlinedButton.icon(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const IntelligenceDashboardScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.radar, size: 18),
+            label: Text('Intelligence for $n watched'),
+          ),
+        );
+      },
     );
   }
 }

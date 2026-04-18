@@ -696,7 +696,145 @@
 
 ---
 
+---
+---
+
+## Session 6: 2026-04-18 — Multi-Source Intelligence Layer
+
+**Kontekst:** S1–S5.5 izgradili single-source platformu ovisnu o Odds API-ju. S6 transformira BetSight u multi-source intelligence platformu s 5 izvora (Odds 0-2.0, Football-Data 0-1.5, NBA Stats 0-1.0, Reddit 0-1.0, Telegram 0-0.5 weighted by reliability) — zbroj confluence score 0-6.0. Scope: samo watched matches (2-5 po korisniku). Novi zasebni Intelligence Dashboard screen, hibrid auto-refresh (1h Timer + on-demand button). **Major version bump (2.0.0+7)** jer je ovo fundamentalna arhitekturalna transformacija.
+
+---
+
+### Task 1 — Source Signal Models + IntelligenceReport
+**Status:** Completed
+
+**Opis:** Data kostur za multi-source intelligence — 5 modela bez bilo kakvih API poziva. SourceScore drži score + reasoning + isActive flag s `inactive` factory za izvor koji nije dao podatke. SourceType enum nosi maxScore weighting (Odds 2.0 / Football-Data 1.5 / NBA Stats 1.0 / Reddit 1.0 / Telegram 0.5 — sum 6.0) + display + emoji icon. Specifični signal modeli (FootballData/NbaStats/Reddit) imaju toClaudeContext za prompt injection, te helper getter-e (form score, sentiment bias). IntelligenceReport agregira sources liste, izračunava confluenceScore, klasificira kategorije (STRONG_VALUE >=4.5 / POSSIBLE_VALUE >=3.0 / WEAK_SIGNAL >=1.5 / LIKELY_SKIP / INSUFFICIENT_DATA <2 active sources), ima color value + interpretacijski tekst po kategoriji.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/models/source_score.dart` — SourceType enum + SourceTypeMeta extension (display/maxScore/icon) + SourceScore klasa s `percentage` getterom + `inactive` factory + toMap/fromMap.
+- `lib/models/football_data_signal.dart` — FootballDataSignal s formama (W/D/L lista do 5), H2H counts, optional standings positions, fetchedAt; form score getter (-1..+1) + toClaudeContext (multi-line).
+- `lib/models/nba_stats_signal.dart` — NbaStatsSignal s last10 W/L lists, optional restDays + standingsRank; toClaudeContext koji izostavlja prazne dijelove.
+- `lib/models/reddit_signal.dart` — RedditSignal s mentionCount, topUpvotes, teamMentions Map; getSentimentBias (-1 home tilt..+1 away tilt) + toClaudeContext s top postom.
+- `lib/models/intelligence_report.dart` — IntelligenceCategory enum + IntelligenceCategoryMeta (display/colorValue/interpretation); IntelligenceReport klasa s confluenceScore (sum aktivnih) + activeSourceCount + category getter + age/isExpired + toClaudeContext (renderira sav blok s `[INTELLIGENCE REPORT]` headerom i `Hint:` linijom).
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 2 — Storage Integration + IntelligenceProvider skeleton
+**Status:** Completed (s očekivanim analyze errorima — vidi napomenu)
+
+**Opis:** Storage proširen na 4 nova Hive boxa (`intelligence_reports`, `football_signals_cache`, `nba_signals_cache`, `reddit_signals_cache`) + `football_data_api_key` field u settings boxu. CRUD za IntelligenceReport (get/save/getAll po confluenceScore desc/delete/clearOld 6h cutoff) i per-source signal cache-eve (3-day TTL). `runScheduledCleanup` proširen s `reports_cleaned`/`football_cleaned`/`nba_cleaned`/`reddit_cleaned` brojevima — dodan helper `_purgeOldSignalCache(box, fetchedAtOf)` koji generički briše stale entries u signal box-evima. IntelligenceProvider skeleton drži in-memory `_reports` map + `_generatingFor` set za loading state, izlaže `reportFor`/`isGeneratingFor`/`allReports`/`error`/`generateReport`/`refreshAllWatched`/`startAutoRefresh`/`stopAutoRefresh`/`removeReportFor`/`clearError`. Aggregator se inject-a kroz `wireAggregator(...)` (zato Provider stoji clean kad aggregator još nije postoji u Task 2 stanju) — generateReport rana-vraća s configuration error-om dok wire nije izvršen.
+
+**Komande izvršene:** flutter analyze (3 očekivana errora — IntelligenceAggregator uri ne postoji, klasa nepoznata; bit će popravljeno u Tasku 6 kad se kreira aggregator); flutter build windows preskočen jer compile-ne prolazi.
+
+**Napomena:** Per spec, Task 2 jedini u sesiji NE mora proći flutter analyze — preostali 3 errora su isključivo missing IntelligenceAggregator class (referenca u IntelligenceProvider) koji se kreira u Tasku 6. flutter analyze će biti 0 issues nakon Task 6.
+
+**Kreirani fajlovi:**
+- `lib/models/intelligence_provider.dart` — IntelligenceProvider ChangeNotifier; konstruktor učitava postojeće reportse iz Storage-a; `wireAggregator` inject; getteri za map/loading set/sorted list/error; metode `generateReport(match, force)`, `refreshAllWatched(matches, force)`, `startAutoRefresh(watchedProviderFn)`, `stopAutoRefresh`, `removeReportFor`, `clearError`; override `dispose` cancela timer.
+
+**Ažurirani fajlovi:**
+- `pubspec.yaml` — version bump na `2.0.0+7` (major bump).
+- `lib/services/storage_service.dart` — uvozi 5 novih modela; 4 nova box constanta + 1 field constant; `init()` otvara 4 nova boxa (sad ukupno 11); 4 nova box getter-a (`_reportsBox`/`_footballBox`/`_nbaBox`/`_redditBox`); CRUD metode za FD/Anthropic/Football API key; report CRUD + clearOldReports; per-source signal cache get/save (Football/NBA/Reddit); `runScheduledCleanup` proširen s 4 nove brojke; novi privatni helper `_purgeOldSignalCache` generički briše stale signal cache entries (3 dana cutoff).
+
+**Verifikacija:** flutter analyze ima samo očekivane errore vezane uz Task 6 missing class. Build verification odgodjen do Task 6.
+
+---
+
+### Task 3 — FootballDataService
+**Status:** Completed (analyze i dalje čeka aggregator iz Task 6)
+
+**Opis:** Football-Data.org v4 client za soccer signal acquisition. Mapira `soccer_epl` → `PL` i `soccer_uefa_champs_league` → `CL`. Glavna metoda `getSignalForMatch` radi 4-5 HTTP poziva po matchu: (1) competition matches lookup s ±1 dan dateRange, (2) fuzzy team-name match (private `_normalize` strip-a sufikse FC/AFC/CF/SC/AC/CD/CB/SL + non-alpha), (3) head2head endpoint za H2H counts, (4) per-team form preko `/teams/{id}/matches?status=FINISHED&limit=5` (calculate W/D/L iz score.winner ovisno o isHome), (5) optional standings za pozicije timova. Hvata 429 (rate limit) i 403 (invalid key) kao explicit FootballDataException. Per spec 10 req/min limit — IntelligenceAggregator (Task 6) treba osigurati serijski pristup.
+
+**Komande izvršene:** flutter analyze (i dalje 3 očekivana errora — IntelligenceAggregator missing).
+
+**Kreirani fajlovi:**
+- `lib/services/football_data_service.dart` — FootballDataService s `_apiKey`/`_competitionMap`; static `_normalize` helper za fuzzy matching; `getSignalForMatch` glavna funkcija; privatni `_getTeamForm` (silent return na non-200); FootballDataException klasa.
+
+**Verifikacija:** flutter analyze očekivane greške zbog aggregator missing.
+
+---
+
+### Task 4 — BallDontLieService
+**Status:** Completed (analyze i dalje čeka aggregator)
+
+**Opis:** BallDontLie.io NBA API client. Besplatan, bez API ključa, neograničen. Samo za NBA mečeve (throw-a BallDontLieException za druge sportove). Koristi privatni `_normalize` (last-word split) za team-name lookup (npr. "Los Angeles Lakers" → "lakers"); cache-ira team IDs in-memory za sve buduće pozive (`_teamIdCache`). `getSignalForMatch` radi: (1) lookup oba teamId-ja, (2) per-team `/games?team_ids[]=&seasons[]=&per_page=15` filter Final games, sort desc, take 10, (3) `_gamesToForm` mapira W/L iz scores ovisno o isHome, (4) rest days iz match.commenceTime - last game date. Standings rank ostaje null jer free tier nema standings endpoint.
+
+**Komande izvršene:** flutter analyze (3 ista očekivana errora).
+
+**Kreirani fajlovi:**
+- `lib/services/ball_dont_lie_service.dart` — BallDontLieService s `_teamIdCache` Map; static `_normalize`; `_getTeamId` (cache check first, fallback fetch all teams, populate cache); `getSignalForMatch` glavna funkcija; privatni `_getTeamLast10Games` (silent fail) + `_gamesToForm`; BallDontLieException klasa.
+
+**Verifikacija:** flutter analyze ima i dalje 3 errora (IntelligenceAggregator missing).
+
+---
+
+### Task 5 — RedditMonitor
+**Status:** Completed (analyze i dalje čeka aggregator)
+
+**Opis:** Reddit public JSON endpoint scanner za sport-specific subreddits — bez API ključa, čita `hot.json?limit=50`. Mandatorni `User-Agent: BetSight/1.0` header (Reddit returns 429 bez njega). Soccer scan-uje `r/soccer` + `r/sportsbook`, NBA `r/nba` + `r/sportsbook`, tennis `r/tennis` + `r/sportsbook`. `getSignalForMatch` iterira subreddits, kombinira title+selftext po post-u u lowercase, broji team mentions (case-insensitive substring), prati top post po upvotes. Returns RedditSignal s mentionCount/topUpvotes/teamMentions/topPostTitle. Per-subreddit failure se silent skip-a — drugi subredditi i dalje pokušavaju.
+
+**Komande izvršene:** flutter analyze (i dalje 3 očekivana errora).
+
+**Kreirani fajlovi:**
+- `lib/services/reddit_monitor.dart` — RedditMonitor s `_subredditsForSport` mapom (Sport → list of subreddits); `getSignalForMatch` koji za svaki subreddit hvata posts i broji team mentions; RedditException klasa.
+
+**Verifikacija:** flutter analyze ima i dalje 3 errora (IntelligenceAggregator missing — popravlja se u Task 6).
+
+---
+
+### Task 6 — IntelligenceAggregator + Scoring Engine
+**Status:** Completed
+
+**Opis:** Centralni aggregator koji koordinira svih 5 izvora paralelno (`Future.wait`), nikad ne baca exception izvan sebe — svaki source error se konvertira u inactive SourceScore. 5 privatnih scoring metoda implementira pravila iz spec-a: `_scoreOdds` (base 0.5 za h2h, +0.5 sharp <5%, +0.5 drift, +0.5 non-Home drift), `_scoreFootballData` (base 0.3 active, +0.4 strong form ≥4/5, +0.4 H2H dominant ≥3/5, +0.4 standings gap ≥8 — uz cache check 3h TTL), `_scoreNbaStats` (base 0.3, +0.35 hot streak ≥7/10, +0.35 rest diff ≥3 dana), `_scoreReddit` (inactive ako mentions <3, base 0.2, +0.3 high buzz ≥10, +0.3 sentiment tilt |bias|>0.3, +0.2 viral ≥500 upvotes), `_scoreTelegram` (max 0.5, sum weights × 0.25 — Visoka=1.0/Srednja=0.7/Niska=0.3/Novo=0.5). Sav cache pristup ide kroz Storage signal box-eve s 3h TTL — 4 izvora postaju efektivno besplatni nakon prvog poziva. **Svi prethodni analyze errori riješeni.**
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/services/intelligence_aggregator.dart` — IntelligenceAggregator klasa s 4 service refs (footballService nullable, nbaService nullable, redditMonitor nullable, telegramProvider required jer uvijek postoji); `buildReport(match)` glavna ulazna točka; 5 privatnih `_scoreXxx` metoda; signal cache check pattern za 3 izvora (FD/NBA/Reddit); per-method graceful handling kroz `SourceScore.inactive`.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 7 — Intelligence Dashboard + Wire-up + Settings + Prompt Injection
+**Status:** Completed
+
+**Opis:** Zasebni IntelligenceDashboardScreen (push route iz Matches) renderira watched matches s per-match karticama: header s sport/league/teams + ConfluenceBadge (boja po category), 5 source rows s emoji/name/LinearProgressIndicator/score-text, "Generated Xm ago" footer. Per-card "Generate" OutlinedButton kad reporta nema, refresh ikona u AppBar i RefreshIndicator za pull. Empty state s radar ikonom kad nema watched matches. main.dart MultiProvider dobio IntelligenceProvider — konstruktor instancira aggregator sa fresh service instancama (Football optional ako nema API key) i wire-a kroz `wireAggregator`. Matches screen dobio `_IntelligenceShortcut` widget (vidljiv samo s ≥1 watched) koji push-a Dashboard. Settings dobiva treću API key sekciju za Football-Data.org (uses postojeći _ApiKeySection pattern). AnalysisProvider `_buildUserMessage` proširen s `intelligenceReports` named arg — ako postoji report za staged match, IntelligenceReport.toClaudeContext() blok se ubacuje između SELECTED MATCHES i TIPSTER SIGNALS. sendMessage skuplja oba (drifts + reports) u istoj petlji nad effectiveMatches. Test wrap-u dodana 4 nova Hive boxa.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows, flutter build apk --debug.
+
+**Kreirani fajlovi:**
+- `lib/screens/intelligence_dashboard_screen.dart` — IntelligenceDashboardScreen StatelessWidget; privatne klase `_IntelligenceMatchCard` (s _relativeTime helperom), `_ConfluenceBadge`.
+
+**Ažurirani fajlovi:**
+- `lib/main.dart` — uvozi IntelligenceProvider + 4 servisa; novi 6. provider u MultiProvider koji konstruira aggregator (Football conditional, NBA + Reddit + Telegram uvijek) i wire-a ga.
+- `lib/screens/matches_screen.dart` — uvozi IntelligenceDashboardScreen; novi `_IntelligenceShortcut` privatni widget render-an iznad TabBar-a.
+- `lib/screens/settings_screen.dart` — `_footballController`/`_showFootball`/`_footballHasKey`/`_footballInited` polja; `_buildFootballDataSection` koristi postojeći `_ApiKeySection` pattern; SnackBar s napomenom "restart app to apply" (jer aggregator se kreira jednom u MultiProvider create lambda-i).
+- `lib/models/analysis_provider.dart` — uvozi intelligence_report; `_buildUserMessage` dobio 5. named arg `intelligenceReports` i renderira IntelligenceReport blokove između SELECTED MATCHES i TIPSTER SIGNALS; sendMessage skuplja `reports` paralelno s `drifts`.
+- `test/widget_test.dart` — setUpAll otvara 4 nova Hive boxa.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan, flutter build apk --debug uspješan.
+
+---
+
+### Finalna verifikacija Session 6:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build windows — uspješan
+- flutter build apk --debug — uspješan
+- APK u rootu: betsight-v2.0.0.apk (NOT in git — `.gitignore` `*.apk`)
+- Verzija: **2.0.0+7 (major bump — multi-source intelligence platform)**
+- Git: Claude Code NE commit-a/push-a — developer preuzima
+
+---
+
 ## Identified Issues
 
 - **Telegram Bot API limitation:** Bot prima poruke samo iz kanala gdje je dodan kao član. Public tipster kanali koji ne dozvoljavaju bot-ove nisu dostupni kroz Bot API. Za full public channel access trebala bi MTProto migracija u kasnijoj sesiji.
+- **Football-Data API key change requires app restart:** Aggregator se konstruira jednom u MultiProvider create lambda-i s tada-postojećim FD ključem. Promjena ključa u Settings se persistira u Hive ali ne re-wire-a aggregator do sljedećeg app pokretanja. SnackBar to spominje. Dynamic re-wire kandidat za S6.5.
+- **IntelligenceProvider auto-refresh nije wired iz UI-ja:** `startAutoRefresh(watchedProvider)` postoji kao API ali se nigdje ne poziva — auto 1h Timer treba explicit poziv s callback-om koji vraća watched matches. Trenutno radi samo on-demand refresh (FAB u Dashboardu + per-card Generate). Wire kandidat za S6.5.
+- **Football-Data team name fuzzy matching edge cases:** Naivna substring usporedba nakon `_normalize`. Imena poput "Manchester United" / "Manchester City" mogu se zbrojiti ako Odds API koristi samo "Manchester". Nije pokriveno disambiguity testovima — može dati pogrešan match u edge slučajevima. Za real-world test pratiti.
 
