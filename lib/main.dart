@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'models/accumulators_provider.dart';
 import 'models/analysis_provider.dart';
 import 'models/bets_provider.dart';
 import 'models/intelligence_provider.dart';
 import 'models/matches_provider.dart';
 import 'models/navigation_controller.dart';
 import 'models/telegram_provider.dart';
+import 'models/tier_provider.dart';
 import 'services/ball_dont_lie_service.dart';
 import 'services/football_data_service.dart';
 import 'services/intelligence_aggregator.dart';
+import 'services/notifications_service.dart';
 import 'services/reddit_monitor.dart';
+import 'widgets/tier_mode_selector.dart';
 import 'screens/analysis_screen.dart';
 import 'screens/bets_screen.dart';
 import 'screens/matches_screen.dart';
@@ -27,13 +31,21 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('StorageService init/cleanup failed: $e');
   }
+  try {
+    await NotificationsService.init();
+    await NotificationsService.requestPermissions();
+  } catch (e) {
+    debugPrint('Notifications init failed: $e');
+  }
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => TierProvider()),
         ChangeNotifierProvider(create: (_) => NavigationController()),
         ChangeNotifierProvider(create: (_) => MatchesProvider()),
         ChangeNotifierProvider(create: (_) => AnalysisProvider()),
         ChangeNotifierProvider(create: (_) => BetsProvider()),
+        ChangeNotifierProvider(create: (_) => AccumulatorsProvider()),
         ChangeNotifierProvider(create: (_) => TelegramProvider()),
         ChangeNotifierProvider(
           create: (context) {
@@ -81,13 +93,23 @@ class MainNavigation extends StatelessWidget {
     return Consumer<NavigationController>(
       builder: (context, nav, child) {
         return Scaffold(
-          body: IndexedStack(
-            index: nav.currentIndex,
-            children: const [
-              MatchesScreen(),
-              AnalysisScreen(),
-              BetsScreen(),
-              SettingsScreen(),
+          body: Column(
+            children: [
+              const SafeArea(
+                bottom: false,
+                child: TierModeSelector(),
+              ),
+              Expanded(
+                child: IndexedStack(
+                  index: nav.currentIndex,
+                  children: const [
+                    MatchesScreen(),
+                    AnalysisScreen(),
+                    BetsScreen(),
+                    SettingsScreen(),
+                  ],
+                ),
+              ),
             ],
           ),
           bottomNavigationBar: BottomNavigationBar(

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../models/match.dart';
 import '../models/matches_provider.dart';
 import '../models/sport.dart';
+import '../screens/match_detail_screen.dart';
 import '../theme/app_theme.dart';
 import 'odds_widget.dart';
 
@@ -67,7 +68,15 @@ class _MatchCardState extends State<MatchCard> {
       child: InkWell(
         onTap: widget.selectable
             ? widget.onSelectionToggle
-            : widget.onTap,
+            : (widget.onTap ??
+                () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          MatchDetailScreen(match: match),
+                    ),
+                  );
+                }),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),

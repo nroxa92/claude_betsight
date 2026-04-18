@@ -1,7 +1,7 @@
 name: betsight
 description: "AI-powered sports betting intelligence platform."
 publish_to: 'none'
-version: 2.0.0+7
+version: 3.0.0+8
 
 environment:
   sdk: ^3.11.0
@@ -15,6 +15,9 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   intl: ^0.20.0
+  fl_chart: ^0.69.0
+  flutter_local_notifications: ^18.0.0
+  timezone: ^0.10.0
 
 dev_dependencies:
   flutter_test:

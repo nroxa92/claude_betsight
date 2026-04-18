@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 
 import '../services/claude_service.dart';
+import '../services/notifications_service.dart';
 import '../services/storage_service.dart';
 import 'analysis_log.dart';
 import 'bet.dart';
 import 'intelligence_report.dart';
+import 'investment_tier.dart';
 import 'match.dart';
 import 'odds_snapshot.dart';
 import 'recommendation.dart';
@@ -20,6 +22,11 @@ class AnalysisProvider extends ChangeNotifier {
   List<TipsterSignal> _stagedSignals = [];
   String? _lastLogId;
   String? _inputPrefill;
+  InvestmentTier _currentTier = InvestmentTier.preMatch;
+
+  void setCurrentTier(InvestmentTier tier) {
+    _currentTier = tier;
+  }
 
   AnalysisProvider({ClaudeService? service})
       : _service = service ?? ClaudeService() {
@@ -167,7 +174,9 @@ Respond in the language the user uses (English, Croatian, or other). Internal re
     final hasHistory = bettingHistory != null && bettingHistory.isNotEmpty;
     final hasIntel =
         intelligenceReports != null && intelligenceReports.isNotEmpty;
-    if (!hasMatches && !hasSignals && !hasHistory && !hasIntel) return text;
+    // Tier appendix is always emitted, so the early-return that used to
+    // skip the buffer when no other context was available is gone.
+    final _ = hasMatches || hasSignals || hasHistory || hasIntel;
 
     final buf = StringBuffer();
     if (hasMatches) {
@@ -232,6 +241,8 @@ Respond in the language the user uses (English, Croatian, or other). Internal re
       buf.writeln('[/BETTING HISTORY]');
       buf.writeln();
     }
+    buf.writeln(_currentTier.claudeContextAppendix);
+    buf.writeln();
     buf.write(text);
     return buf.toString();
   }
@@ -298,6 +309,7 @@ Respond in the language the user uses (English, Croatian, or other). Internal re
       _messages.add(ChatMessage(role: 'assistant', content: reply));
 
       try {
+        final recType = parseRecommendationType(reply);
         final log = AnalysisLog(
           id: generateUuid(),
           timestamp: DateTime.now(),
@@ -305,10 +317,21 @@ Respond in the language the user uses (English, Croatian, or other). Internal re
           assistantResponse: reply,
           contextMatchIds:
               effectiveContext?.map((m) => m.id).toList() ?? const [],
-          recommendationType: parseRecommendationType(reply),
+          recommendationType: recType,
         );
         _lastLogId = log.id;
         await StorageService.saveAnalysisLog(log);
+
+        if (recType == RecommendationType.value &&
+            effectiveContext != null &&
+            effectiveContext.isNotEmpty) {
+          try {
+            await NotificationsService.showValueAlert(
+                effectiveContext.first);
+          } catch (_) {
+            // notification failure must not block UX
+          }
+        }
       } catch (e) {
         debugPrint('Failed to save analysis log: $e');
       }

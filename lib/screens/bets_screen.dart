@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/accumulators_provider.dart';
 import '../models/bet.dart';
 import '../models/bets_provider.dart';
+import '../models/tier_provider.dart';
+import '../widgets/accumulator_card.dart';
 import '../widgets/bet_card.dart';
 import '../widgets/bet_entry_sheet.dart';
 import '../widgets/pnl_summary.dart';
+import 'accumulator_builder_screen.dart';
 
 class BetsScreen extends StatefulWidget {
   const BetsScreen({super.key});
@@ -63,33 +67,105 @@ class _BetsScreenState extends State<BetsScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Bets')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showManualBetEntry(context),
-        child: const Icon(Icons.add),
-      ),
-      body: Column(
-        children: [
-          const PlSummaryWidget(),
-          TabBar(
+    return Consumer<TierProvider>(
+      builder: (context, tierProv, child) {
+        final isAcca =
+            tierProv.currentTier == InvestmentTier.accumulator;
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(isAcca ? 'Accumulators' : 'Bets'),
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () {
+              if (isAcca) {
+                final accas = context.read<AccumulatorsProvider>();
+                if (accas.currentDraft == null) accas.startNewDraft();
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AccumulatorBuilderScreen(),
+                  ),
+                );
+              } else {
+                _showManualBetEntry(context);
+              }
+            },
+            child: const Icon(Icons.add),
+          ),
+          body: isAcca ? _buildAccumulatorView() : _buildRegularView(),
+        );
+      },
+    );
+  }
+
+  Widget _buildRegularView() {
+    return Column(
+      children: [
+        const PlSummaryWidget(),
+        TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Open'),
+            Tab(text: 'Settled'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
             controller: _tabController,
-            tabs: const [
-              Tab(text: 'Open'),
-              Tab(text: 'Settled'),
+            children: [
+              _buildOpenTab(),
+              _buildSettledTab(),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildOpenTab(),
-                _buildSettledTab(),
-              ],
-            ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAccumulatorView() {
+    return Consumer2<AccumulatorsProvider, BetsProvider>(
+      builder: (_, accas, bets, child) {
+        return DefaultTabController(
+          length: 3,
+          child: Column(
+            children: [
+              const TabBar(
+                tabs: [
+                  Tab(text: 'Building'),
+                  Tab(text: 'Placed'),
+                  Tab(text: 'Settled'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _buildAccaList(accas.building, bets.bankroll.currency,
+                        emptyText: 'No drafts — tap + to start one'),
+                    _buildAccaList(accas.placed, bets.bankroll.currency,
+                        emptyText: 'No placed accumulators yet'),
+                    _buildAccaList(accas.settled, bets.bankroll.currency,
+                        emptyText: 'No settled accumulators yet'),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAccaList(List list, String currency,
+      {required String emptyText}) {
+    if (list.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.layers_outlined,
+        text: emptyText,
+      );
+    }
+    return ListView.builder(
+      itemCount: list.length,
+      itemBuilder: (_, i) =>
+          AccumulatorCard(acca: list[i], currency: currency),
     );
   }
 

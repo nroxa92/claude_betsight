@@ -1,10 +1,12 @@
 import 'package:hive_flutter/hive_flutter.dart';
 
+import '../models/accumulator.dart';
 import '../models/analysis_log.dart';
 import '../models/bet.dart';
 import '../models/cached_matches_entry.dart';
 import '../models/football_data_signal.dart';
 import '../models/intelligence_report.dart';
+import '../models/match_note.dart';
 import '../models/monitored_channel.dart';
 import '../models/nba_stats_signal.dart';
 import '../models/odds_snapshot.dart';
@@ -24,7 +26,10 @@ class StorageService {
   static const _footballSignalsBox = 'football_signals_cache';
   static const _nbaSignalsBox = 'nba_signals_cache';
   static const _redditSignalsBox = 'reddit_signals_cache';
+  static const _accumulatorsBox = 'accumulators';
+  static const _matchNotesBox = 'match_notes';
   static const _footballDataApiKeyField = 'football_data_api_key';
+  static const _currentTierField = 'current_tier';
   static const _cacheEntryKey = 'all_matches';
   static const _cacheTtlMinutesField = 'cache_ttl_minutes';
   static const _lastCleanupField = 'last_cleanup_at';
@@ -50,6 +55,8 @@ class StorageService {
     await Hive.openBox(_footballSignalsBox);
     await Hive.openBox(_nbaSignalsBox);
     await Hive.openBox(_redditSignalsBox);
+    await Hive.openBox(_accumulatorsBox);
+    await Hive.openBox(_matchNotesBox);
   }
 
   static Box get _box => Hive.box(_settingsBox);
@@ -63,6 +70,8 @@ class StorageService {
   static Box get _footballBox => Hive.box(_footballSignalsBox);
   static Box get _nbaBox => Hive.box(_nbaSignalsBox);
   static Box get _redditBox => Hive.box(_redditSignalsBox);
+  static Box get _accaBox => Hive.box(_accumulatorsBox);
+  static Box get _notesBox => Hive.box(_matchNotesBox);
 
   static String? getAnthropicApiKey() =>
       _box.get(_anthropicApiKeyField) as String?;
@@ -228,6 +237,46 @@ class StorageService {
       _box.put(_footballDataApiKeyField, key);
   static Future<void> deleteFootballDataApiKey() =>
       _box.delete(_footballDataApiKeyField);
+
+  static String? getCurrentTier() =>
+      _box.get(_currentTierField) as String?;
+  static Future<void> saveCurrentTier(String tierName) =>
+      _box.put(_currentTierField, tierName);
+
+  static List<Accumulator> getAllAccumulators() {
+    final list = <Accumulator>[];
+    for (final map in _accaBox.values) {
+      try {
+        list.add(Accumulator.fromMap(map as Map<dynamic, dynamic>));
+      } catch (_) {
+        // skip malformed
+      }
+    }
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
+  }
+
+  static Future<void> saveAccumulator(Accumulator acca) =>
+      _accaBox.put(acca.id, acca.toMap());
+
+  static Future<void> deleteAccumulator(String id) =>
+      _accaBox.delete(id);
+
+  static MatchNote? getMatchNote(String matchId) {
+    final map = _notesBox.get(matchId);
+    if (map == null) return null;
+    try {
+      return MatchNote.fromMap(map as Map<dynamic, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveMatchNote(MatchNote note) =>
+      _notesBox.put(note.matchId, note.toMap());
+
+  static Future<void> deleteMatchNote(String matchId) =>
+      _notesBox.delete(matchId);
 
   static IntelligenceReport? getReport(String matchId) {
     final map = _reportsBox.get(matchId);

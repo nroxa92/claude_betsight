@@ -831,10 +831,211 @@
 
 ---
 
+---
+---
+
+## Session 7: 2026-04-18 — Three-Tier Framework + Charts + Push + Detail Screens
+
+**Kontekst:** S1-S6 izgradili single-tier multi-source platformu. S7 uvodi tri investicijska horizonta (PRE-MATCH / LIVE / ACCUMULATOR), svaki s vlastitim Claude promptom, suggestion chips, i Bets screen prikazom. Pored toga: Charts (odds movement, form, equity curve), MatchDetailScreen (deep dive s 4 taba), Push Notifications (kickoff + drift + VALUE), tier-aware empty states. **Major bump na 3.0.0+8** — fundamentalna transformacija iz single-strategy u multi-strategy platformu.
+
+---
+
+### Task 1 — InvestmentTier + TierProvider + Dependencies
+**Status:** Completed
+
+**Opis:** Data kostur za tier sustav. InvestmentTier enum (preMatch/live/accumulator) + InvestmentTierMeta extension s display/icon/horizon/philosophy/colorValue/fromString. TierProvider drži current tier, perzistira u settings boxu, izlaže `suggestionChips` (lista 3 prompt suggestiona po tier-u za Analysis empty state) i `claudeContextAppendix` (tier-specific blok koji se appenda u Claude user message — npr. "TIER: PRE-MATCH — 24-48h horizon, focus on deep pre-kickoff analysis..."). Tri nove dependencies u pubspec: `fl_chart ^0.69.0` (Task 6), `flutter_local_notifications ^18.0.0` + `timezone ^0.10.0` (Task 8). Storage proširen s `_currentTierField` getter/saver. main.dart MultiProvider — TierProvider added kao prvi (jer ostali provideri mogu read-ati u budućnosti).
+
+**Komande izvršene:** flutter pub get, flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/models/investment_tier.dart` — InvestmentTier enum + extension getters.
+- `lib/models/tier_provider.dart` — TierProvider ChangeNotifier + tier-specific suggestionChips + claudeContextAppendix.
+
+**Ažurirani fajlovi:**
+- `pubspec.yaml` — version bump 3.0.0+8 + 3 nove dependencies.
+- `lib/services/storage_service.dart` — `_currentTierField` constant + `getCurrentTier`/`saveCurrentTier`.
+- `lib/main.dart` — uvozi TierProvider; dodan kao prvi u MultiProvider.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 2 — Tier Mode Selector UI + Integration
+**Status:** Completed
+
+**Opis:** TierModeSelector widget renderira 3 tab-like buttona (⚽ Pre-Match / 🔴 Live / 🏆 Accumulator) ispod AppBar-a. Aktivni tab dobiva tier-specific boju (purple/red/orange) sa border + alpha 0.2 fill. AnimatedContainer 200ms na switch. MainNavigation dobio Column wrap iznad IndexedStack-a — TierModeSelector je SafeArea(bottom: false) GLOBAL element vidljiv na svim screen-ovima.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/widgets/tier_mode_selector.dart` — TierModeSelector StatelessWidget; Consumer<TierProvider>; map kroz InvestmentTier.values, GestureDetector + AnimatedContainer per tab.
+
+**Ažurirani fajlovi:**
+- `lib/main.dart` — uvozi TierModeSelector; MainNavigation body Scaffold zamijenjen s Column[SafeArea(TierModeSelector) + Expanded(IndexedStack)].
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 3 — Tier-Aware Analysis Screen
+**Status:** Completed
+
+**Opis:** Analysis screen sad reaguje na trenutni tier. Empty state dinamički prikazuje tier icon + display name + philosophy + tier-specific suggestion chips. `_sendMessage` čita TierProvider.currentTier i postavlja na AnalysisProvider prije slanja. AnalysisProvider sada drži `_currentTier` field i appenda `claudeContextAppendix` blok na kraj svakog user message-a (ispred user text-a). `claudeContextAppendix` premješten iz TierProvider-a u InvestmentTier extension da bi getter bio dostupan na enum vrijednosti — TierProvider sada delegira na enum.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/models/investment_tier.dart` — extension dobio `claudeContextAppendix` getter (premješten iz TierProvider-a).
+- `lib/models/tier_provider.dart` — `claudeContextAppendix` sada delegira na `_currentTier`; dodan `export 'investment_tier.dart'` za sažetiji import flow.
+- `lib/models/analysis_provider.dart` — uvozi investment_tier; field `_currentTier` + `setCurrentTier` setter; `_buildUserMessage` appenda tier blok uvijek (early-return uklonjen).
+- `lib/screens/analysis_screen.dart` — uvozi tier_provider; `_sendMessage` postavlja tier na AnalysisProvider; `_buildEmptyState` zamijenjen Consumer<TierProvider> koji renderira tier-specific icon/display/philosophy + dinamičke suggestion chips.
+- `lib/widgets/tier_mode_selector.dart` — uklonjen unused investment_tier import (sad ide kroz tier_provider re-export).
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 4 — Accumulator Model + Provider + Builder Screen
+**Status:** Completed
+
+**Opis:** Acca data layer + builder UI. AccumulatorLeg drži snapshot ishoda (matchId/sport/league/teams/selection/odds/kickoff). Accumulator agregira legs + stake + status (building/placed/won/lost/partial), izračunava combinedOdds (multiplikacija) + potentialPayout/Profit + actualProfit. `correlationWarnings` getter detektira (a) duplicate match IDs i (b) više legs iz istog league-a istog dana — UI prikazuje orange warning banner. AccumulatorsProvider drži in-memory liste + currentDraft, exposes building/placed/settled filteri + lifecycle metode (startNewDraft/addLegToDraft/removeLegFromDraft/setDraftStake/saveDraftAsAccumulator validira ≥2 legs && stake>0/discardDraft/placeAccumulator/settleAccumulator/deleteAccumulator). AccumulatorBuilderScreen je full push route s 3-zone layout: legs lista (s remove), horizontal scroll watched matches za pick (otvara outcome dialog), stake input, summary card (legs/odds/payout), conditional warnings, Save FAB. Material `Accumulator` collision riješen `hide Accumulator` u import-u.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/models/accumulator.dart` — AccumulatorLeg + AccumulatorStatus + AccumulatorStatusMeta extension + Accumulator klasa s correlationWarnings getterom + copyWith + toMap/fromMap.
+- `lib/models/accumulators_provider.dart` — AccumulatorsProvider ChangeNotifier.
+- `lib/screens/accumulator_builder_screen.dart` — AccumulatorBuilderScreen + privatne klase `_LegTile`, `_PickableMatchCard`, `_SummaryCard`, `_MetricCol`; helper `_pickOutcome` AlertDialog s ListTile po dostupnom outcome-u (uključuje Draw za soccer); `hide Accumulator` u flutter/material import-u zbog naming collision-a.
+
+**Ažurirani fajlovi:**
+- `lib/services/storage_service.dart` — uvozi Accumulator; `_accumulatorsBox` constant + box getter; `init()` otvara 12. box; `getAllAccumulators` (sort createdAt desc) + `saveAccumulator` + `deleteAccumulator`.
+- `lib/main.dart` — uvozi AccumulatorsProvider; dodan kao 7. provider.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 5 — Tier-Aware Bets Screen + AccumulatorCard
+**Status:** Completed
+
+**Opis:** Bets screen sad reaguje na trenutni tier — Consumer<TierProvider> grana izmedu `_buildRegularView` (Open/Settled tabs s BetCard, pre-existing) i `_buildAccumulatorView` (DefaultTabController length 3 — Building/Placed/Settled tabs s AccumulatorCard). FAB se ponaša drugačije: u acca tier-u otvara AccumulatorBuilderScreen (započne novi draft ako nema), inače otvara klasični BetEntrySheet. AccumulatorCard analogan BetCard-u: header s "${legs.length} legs" + odds badge (multiplied combined) + status chip; preview do 3 legs + "+X more"; meta chips (Stake/Payout); conditional P&L row; tier-specific action buttoni (Place za building, Settle sheet za placed s 3 opcije Won/Lost/Partial); Dismissible swipe-to-delete.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/widgets/accumulator_card.dart` — AccumulatorCard StatelessWidget s privatnim klasama `_OddsBadge`, `_StatusChip`, `_MetaChip` + helperi `_buildActions`/`_confirmDelete`/`_showSettleSheet`/`_settleButton`. `hide Accumulator` u flutter import.
+
+**Ažurirani fajlovi:**
+- `lib/screens/bets_screen.dart` — uvozi tier_provider/accumulators_provider/AccumulatorBuilderScreen/AccumulatorCard; build wrap-an u Consumer<TierProvider> koji bira view; novi `_buildRegularView` (extracted), `_buildAccumulatorView` (3 taba), `_buildAccaList` helper s empty state.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 6 — fl_chart Integration + Chart Widgets
+**Status:** Completed
+
+**Opis:** 3 reusable chart widgeta. OddsMovementChart koristi fl_chart LineChart s 2-3 linije (home blue, draw orange optional, away red); X-axis je hours offset od prvog snapshota, Y-axis decimalne kvote; "Not enough snapshots" placeholder kad <2. FormChart je jednostavan horizontal bar — za svaki W/D/L u listi renderira 28x28 obojen badge (green/grey/red s alpha 0.2 fill + border). EquityCurveChart sortira settled bets po `settledAt`/`placedAt`, akumulira running profit, renderira LineChart s bojom green/red ovisno o end-state-u + areaBelow s alpha 0.1.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/widgets/charts/odds_movement_chart.dart` — OddsMovementChart (LineChart, 2-3 line series).
+- `lib/widgets/charts/form_chart.dart` — FormChart (Row badge sequence).
+- `lib/widgets/charts/equity_curve_chart.dart` — EquityCurveChart (LineChart cumulative P/L).
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 7 — MatchDetailScreen + MatchNote
+**Status:** Completed
+
+**Opis:** Push route iz MatchCard tap (kad nije selectable). DefaultTabController s 4 taba: **Overview** (sport/league/kickoff + 2-3 OddsTile + bookmaker/margin row + "Analyze in AI" button koji prebacuje na Analysis tab i pop-a do root-a), **Intelligence** (Consumer<IntelligenceProvider>; placeholder s Generate button kad nema reporta, CircularProgressIndicator dok loadin, full report view s confluence circle/category/interpretation + per-source rows + Refresh button), **Charts** (OddsMovementChart 200px iz Storage snapshots + FormChart home + FormChart away ako postoji FootballDataSignal cached), **Notes** (full-screen TextField s pre-filled iz Storage + Save button + last-saved timestamp). AppBar action — star toggle za watched. MatchCard onTap default sad otvara MatchDetailScreen ako onTap nije eksplicitno proslijeđen.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/models/match_note.dart` — MatchNote (matchId/text/updatedAt) + toMap/fromMap.
+- `lib/screens/match_detail_screen.dart` — MatchDetailScreen StatefulWidget + privatne klase `_OverviewTab`, `_OddsTile`, `_IntelligenceTab`, `_ReportView`, `_ChartsTab`.
+
+**Ažurirani fajlovi:**
+- `lib/services/storage_service.dart` — uvozi MatchNote; `_matchNotesBox` constant + `_notesBox` getter; `init()` otvara 13. box; `getMatchNote`/`saveMatchNote`/`deleteMatchNote`.
+- `lib/widgets/match_card.dart` — uvozi MatchDetailScreen; default onTap (kad nije selectable i nije eksplicitno proslijeđen) otvara detail screen kroz Navigator.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 8 — Push Notifications Service
+**Status:** Completed
+
+**Opis:** NotificationsService statički wrapper oko `flutter_local_notifications` s 3 channela (kickoff defaultImportance, drift high, value high). `init` poziva tz.initializeTimeZones + plugin init s Android/iOS settings. `requestPermissions` traži notification permission na Android. `scheduleKickoffReminders(match)` zakazuje 3 reminderima (24h/1h/15min before kickoff) preko `zonedSchedule` s deterministic ID-om (matchId.hashCode + secondsOffset) za clean cancel; pre-past reminders se preskaču. `cancelKickoffReminders(matchId)` briše po istim ID-evima. `showDriftAlert` i `showValueAlert` su immediate `show` pozivi. main.dart inicijalizira u svom try/catch bloku nakon Storage init. MatchesProvider.toggleWatched scheduleKickoffReminders na watch / cancelKickoffReminders na unwatch. `_captureSnapshotsForWatched` pokreće drift alert kad postoji significant move s |%| ≥ 5. AnalysisProvider nakon successful response checka VALUE marker i pokreće value alert za prvi staged match. Sve notification pozive su u try/catch — failure ne smije razbiti UX.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Kreirani fajlovi:**
+- `lib/services/notifications_service.dart` — NotificationsService static wrapper.
+
+**Ažurirani fajlovi:**
+- `lib/main.dart` — uvozi NotificationsService; novi try/catch blok za init + requestPermissions.
+- `lib/models/matches_provider.dart` — uvozi NotificationsService; toggleWatched schedule/cancel; `_captureSnapshotsForWatched` triggera drift alert >5%.
+- `lib/models/analysis_provider.dart` — uvozi NotificationsService; nakon AnalysisLog save provjerava VALUE i triggera alert.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan. Notifications su Android-prvi feature — full E2E test traži APK na uređaju.
+
+---
+
+### Task 9 — Tier-Aware P&L Summary + Equity Curve
+**Status:** Completed
+
+**Opis:** PlSummaryWidget proširen — return value je sada Column s postojećim 4-metric Card-om (totalBets/winRate/ROI/totalP&L) PLUS conditional drugi Card s "Equity Curve" labelom + 120px EquityCurveChart kad ima ≥2 settled bets.
+
+**Komande izvršene:** flutter analyze, flutter build windows.
+
+**Ažurirani fajlovi:**
+- `lib/widgets/pnl_summary.dart` — uvozi EquityCurveChart; Card → Column wrap; conditional render drugog Card-a s chartom.
+
+**Verifikacija:** flutter analyze 0 issues, flutter build windows uspješan.
+
+---
+
+### Task 10 — Polish + Final Verification
+**Status:** Completed
+
+**Opis:** Finalna sesijska polish runda. Test wrap proširen s TierProvider + AccumulatorsProvider + 2 nova Hive boxa (`accumulators`, `match_notes`). Tijekom APK build-a otkriveno da `flutter_local_notifications 18.x` zahtijeva core library desugaring na Android — popravak u `android/app/build.gradle.kts` (dodano `isCoreLibraryDesugaringEnabled = true` u compileOptions + dependency `desugar_jdk_libs:2.0.4`). Tier-aware Settings notification toggle blok preskočen — zabilježen kao Identified Issue za buduću sesiju.
+
+**Komande izvršene:** flutter analyze, flutter test, flutter build windows, flutter build apk --debug.
+
+**Ažurirani fajlovi:**
+- `test/widget_test.dart` — 2 nova Hive boxa + TierProvider/AccumulatorsProvider u test wrap.
+- `android/app/build.gradle.kts` — `isCoreLibraryDesugaringEnabled = true` + `coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")` dependency.
+
+**Verifikacija:** flutter analyze 0 issues, flutter test 2/2 passed, flutter build windows uspješan, flutter build apk --debug uspješan.
+
+---
+
+### Finalna verifikacija Session 7:
+- flutter analyze — 0 issues
+- flutter test — 2/2 passed
+- flutter build windows — uspješan
+- flutter build apk --debug — uspješan
+- APK u rootu: betsight-v3.0.0.apk (NOT in git — `.gitignore` `*.apk`)
+- Verzija: **3.0.0+8** (major bump — multi-strategy intelligence platform)
+- Git: Claude Code NE commit-a/push-a — developer preuzima
+
+---
+
 ## Identified Issues
 
 - **Telegram Bot API limitation:** Bot prima poruke samo iz kanala gdje je dodan kao član. Public tipster kanali koji ne dozvoljavaju bot-ove nisu dostupni kroz Bot API. Za full public channel access trebala bi MTProto migracija u kasnijoj sesiji.
 - **Football-Data API key change requires app restart:** Aggregator se konstruira jednom u MultiProvider create lambda-i s tada-postojećim FD ključem. Promjena ključa u Settings se persistira u Hive ali ne re-wire-a aggregator do sljedećeg app pokretanja. SnackBar to spominje. Dynamic re-wire kandidat za S6.5.
 - **IntelligenceProvider auto-refresh nije wired iz UI-ja:** `startAutoRefresh(watchedProvider)` postoji kao API ali se nigdje ne poziva — auto 1h Timer treba explicit poziv s callback-om koji vraća watched matches. Trenutno radi samo on-demand refresh (FAB u Dashboardu + per-card Generate). Wire kandidat za S6.5.
 - **Football-Data team name fuzzy matching edge cases:** Naivna substring usporedba nakon `_normalize`. Imena poput "Manchester United" / "Manchester City" mogu se zbrojiti ako Odds API koristi samo "Manchester". Nije pokriveno disambiguity testovima — može dati pogrešan match u edge slučajevima. Za real-world test pratiti.
+- **LIVE tier filtering nedostaje matchStartedAt na Bet model:** Bets screen u LIVE tier-u trenutno pokazuje sve klasične bet-ove (isto kao PRE-MATCH). Strict separation traži `placedAt > matchStartedAt` filter što zahtijeva matchStartedAt field na Bet modelu (kandidat za S7.5).
+- **Notifications per-type enable nije implementiran:** Settings nema toggle za uključi/isključi pojedine notification kanale. Trenutno su svi always-on. SwitchListTile sekcija "Notifications" preskočena u Tasku 10 — kandidat za S7.5.
+- **Accumulator stake validacija prihvata invalid input:** TextField za stake u BuilderScreen ne odbija negative ili zero — Save button je gated na `stake > 0` ali UX bi mogao bolje dati feedback (red border kad stake ≤ 0).
+- **Chart widget axis labele mogu se preklapati na malim uređajima:** OddsMovementChart i EquityCurveChart leftTitles 50px reservedSize može biti prevelika za uređaje <360dp. Real-world test treba pratiti.
+- **MatchDetailScreen Charts tab ne pokriva tennis:** Charts tab pokazuje OddsMovement (uvijek) i FormChart (samo ako ima FootballDataSignal). NbaStatsSignal i tennis nisu vizualizirani. Manja vrijednost za tennis jer nema dedicated tennis service.
+- **Match name collision: Material `Accumulator` vs naš model:** Nije bug, samo coding-style napomena — `import 'package:flutter/material.dart' hide Accumulator;` korišteno u `accumulator_builder_screen.dart` i `accumulator_card.dart`. Buduće rename na `BetAccumulator` može biti čišće.
 

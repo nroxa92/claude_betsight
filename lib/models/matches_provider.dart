@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../services/notifications_service.dart';
 import '../services/odds_api_service.dart';
 import '../services/storage_service.dart';
 import 'match.dart';
@@ -102,10 +103,18 @@ class MatchesProvider extends ChangeNotifier {
   bool isWatched(String matchId) => _watchedMatchIds.contains(matchId);
 
   Future<void> toggleWatched(String matchId) async {
-    if (_watchedMatchIds.contains(matchId)) {
+    final wasWatched = _watchedMatchIds.contains(matchId);
+    if (wasWatched) {
       _watchedMatchIds.remove(matchId);
+      await NotificationsService.cancelKickoffReminders(matchId);
     } else {
       _watchedMatchIds.add(matchId);
+      try {
+        final match = _allMatches.firstWhere((m) => m.id == matchId);
+        await NotificationsService.scheduleKickoffReminders(match);
+      } catch (_) {
+        // match not in current list — schedule deferred (no-op for now)
+      }
     }
     await StorageService.saveWatchedMatchIds(_watchedMatchIds);
     notifyListeners();
@@ -137,6 +146,17 @@ class MatchesProvider extends ChangeNotifier {
           await StorageService.saveSnapshotIfChanged(snapshot);
       if (didSave) {
         saved++;
+        final drift = driftForMatch(match.id);
+        if (drift != null && drift.hasSignificantMove) {
+          final dominantAbs = drift.dominantDrift.percent.abs();
+          if (dominantAbs >= 5) {
+            try {
+              await NotificationsService.showDriftAlert(match, drift);
+            } catch (_) {
+              // notification failure must not break capture loop
+            }
+          }
+        }
       } else {
         skipped++;
       }

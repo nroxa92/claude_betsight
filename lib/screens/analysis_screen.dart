@@ -5,6 +5,7 @@ import '../models/analysis_provider.dart';
 import '../models/recommendation.dart';
 import '../models/sport.dart';
 import '../models/telegram_provider.dart';
+import '../models/tier_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/signal_card.dart';
@@ -77,7 +78,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
     _textController.clear();
+    final tier = context.read<TierProvider>().currentTier;
     final p = context.read<AnalysisProvider>();
+    p.setCurrentTier(tier);
     p.sendMessage(text).then((_) => _scrollToBottom());
   }
 
@@ -195,32 +198,48 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.auto_awesome, size: 64, color: Colors.grey[600]),
-            const SizedBox(height: 16),
-            const Text(
-              'Start your betting analysis',
-              style: TextStyle(color: Colors.white, fontSize: 18),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                for (final s in const [
-                  "Analyze today's EPL",
-                  "NBA value picks",
-                  "ATP upsets",
-                ])
-                  ActionChip(
-                    label: Text(s),
-                    onPressed: () {
-                      _textController.text = s;
-                      _sendMessage();
-                    },
-                  ),
-              ],
+            Consumer<TierProvider>(
+              builder: (_, tierProv, child) {
+                final tier = tierProv.currentTier;
+                return Column(
+                  children: [
+                    Text(tier.icon, style: const TextStyle(fontSize: 48)),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${tier.display} analysis',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      tier.philosophy,
+                      style: TextStyle(
+                          color: Colors.grey[400], fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        for (final s in tierProv.suggestionChips)
+                          ActionChip(
+                            label: Text(s),
+                            onPressed: () {
+                              _textController.text = s;
+                              _sendMessage();
+                            },
+                          ),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),

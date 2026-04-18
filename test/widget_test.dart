@@ -1,11 +1,13 @@
 import 'dart:io';
 
 import 'package:betsight/main.dart';
+import 'package:betsight/models/accumulators_provider.dart';
 import 'package:betsight/models/analysis_provider.dart';
 import 'package:betsight/models/bets_provider.dart';
 import 'package:betsight/models/matches_provider.dart';
 import 'package:betsight/models/navigation_controller.dart';
 import 'package:betsight/models/telegram_provider.dart';
+import 'package:betsight/models/tier_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
@@ -14,10 +16,12 @@ import 'package:provider/provider.dart';
 Widget _wrap() {
   return MultiProvider(
     providers: [
+      ChangeNotifierProvider(create: (_) => TierProvider()),
       ChangeNotifierProvider(create: (_) => NavigationController()),
       ChangeNotifierProvider(create: (_) => MatchesProvider()),
       ChangeNotifierProvider(create: (_) => AnalysisProvider()),
       ChangeNotifierProvider(create: (_) => BetsProvider()),
+      ChangeNotifierProvider(create: (_) => AccumulatorsProvider()),
       ChangeNotifierProvider(create: (_) => TelegramProvider()),
     ],
     child: const BetSightApp(),
@@ -39,6 +43,8 @@ void main() {
     await Hive.openBox('football_signals_cache');
     await Hive.openBox('nba_signals_cache');
     await Hive.openBox('reddit_signals_cache');
+    await Hive.openBox('accumulators');
+    await Hive.openBox('match_notes');
   });
 
   testWidgets('BetSightApp renders with bottom navigation', (tester) async {
