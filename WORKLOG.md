@@ -1681,6 +1681,50 @@ Storage test suite pokriva sve API-key roundtrip-ove, value preset, tier, notifi
 
 ---
 
+## Session 12.5 DOC FIX: 2026-04-19 — WORKLOG točnost i gramatika
+
+### Task — S12 entry audit + corrections
+**Status:** Completed
+
+**Opis:** Pregled S12 zapisa u `WORKLOG.md`, ispravak hrvatskih tipfelera, korekcija netočnih test-count brojki (uspoređene s actual `flutter test` per-file output-om) i uklanjanje neispravne datumske oznake (S12 entry je tvrdio 2026-04-18, a sesija je završila 2026-04-19).
+
+**Komande izvršene:**
+- `flutter test test/unit/providers/` — 122 passed (verifikacija ukupnog broja)
+- `flutter test test/unit/services/storage_service_test.dart` — 64
+- `flutter test test/unit/services/intelligence_aggregator_test.dart` — 10 (zapisano kao 13 — ispravljeno)
+- `flutter test test/unit/services/football_data_service_test.dart` — 11
+- per-file count loop nad svim S12 test fajlovima
+- `flutter test` (cijela suite) — 623 passed
+- `flutter analyze` — 0 issues
+
+**Ažurirani fajlovi:**
+- `WORKLOG.md` — S12 entry (1601-1680):
+  - **Datum:** "2026-04-18" → "2026-04-19".
+  - **Test counts ispravljeni nakon `flutter test` verifikacije:**
+    - `bets_provider_test.dart`: 37 → 27.
+    - `accumulators_provider_test.dart`: 18 → 19.
+    - `intelligence_provider_test.dart`: 11 → 9.
+    - `intelligence_aggregator_test.dart`: 13 → 10.
+    - "17 novih test fajlova" → 18 (1 helper + 1 storage_service + 2 service + 7 provider + 4 widget + 3 integration).
+  - **Tipfeleri / gramatika:**
+    - "svih čin notifier-a" → "svi ChangeNotifier-i".
+    - "confirma" → "potvrđuje".
+    - "Gotcha rezoluija" → "Gotcha rezolucija".
+    - "trimm/lowercase" → "trim/lowercase".
+    - "Extends S11 coverage into territory koja..." → "Proširuje S11 coverage u područja koja...".
+    - "treba stvarati" → "treba stvoriti".
+  - **Konzistencija:**
+    - Phase 3 status iz "Partially completed" → "Completed (s 1 dokumentiranim infrastructure backlog-om)".
+    - TierModeSelector entry usklađen sa stvarnim 3 testa (selected-border introspection test je bio izostavljen tijekom S12 zbog hang-a, ali entry ga je još spominjao).
+    - Phase 6 brojke ispravljene; uklonjena nepotrebna rečenica "Subtotal 129 cumulative from S11+S12" (matematika nije pasala).
+
+### Verifikacija S12.5:
+- `flutter test` — **623 passed** (nepromijenjen broj, samo su brojke u dokumentaciji ispravljene)
+- `flutter analyze` — 0 issues
+- WORKLOG numerika sada se podudara s `flutter test` per-file output-om.
+
+---
+
 ## Identified Issues
 
 ### By-Design (Will Not Fix)
