@@ -1503,6 +1503,184 @@
 
 ---
 
+## Session 11: 2026-04-18 — Comprehensive Test Coverage
+
+### Phase 1 — Unit Model Tests
+**Status:** Completed
+
+**Opis:** Pure-logic unit testovi za sve data modele u `lib/models/`. Pokriveni su enumi (Sport, BetSelection, BetStatus, RecommendationType, InvestmentTier, SourceType, AccumulatorStatus, IntelligenceCategory, UserFeedback), value objekti (H2HOdds, Match, Bet, BetAccumulator, AccumulatorLeg, BankrollConfig, OddsSnapshot, OddsDrift, TipsterSignal, MonitoredChannel, AnalysisLog, MatchNote, SourceScore, FootballDataSignal, NbaStatsSignal, RedditSignal, IntelligenceReport, CachedMatchesEntry, SportPl, ValuePreset) i čisti utility (parseRecommendationType, generateUuid).
+
+Testovi su strukturirani kao `group()` blokovi s `buildX()` factory helpers-ima (CoinSight pattern) za concise, DRY arrange step-ove. Koriste se `closeTo()` za float aritmetiku, `throwsA(isA<T>())` za exception paths, i `toMap()/fromMap()` roundtrip pattern za sve Hive-serializable tipove.
+
+**Direktoriji kreirani:**
+- `test/unit/models/` — 16 test fajlova
+- `test/unit/providers/` — 1 test fajl (NavigationController — jedini provider bez Hive coupling-a)
+- `test/unit/services/` — 4 test fajla (Phase 2)
+- `test/widget/widgets/` — 4 test fajla (Phase 3)
+
+**Kreirani fajlovi (Phase 1 — models):**
+- `test/unit/models/sport_test.dart` — Sport enum + SportMeta (display, icon, hasDraw, defaultSportKeys, fromSportKey); unknown keys → null.
+- `test/unit/models/odds_test.dart` — H2HOdds (impliedHomeProb/AwayProb/DrawProb, bookmakerMargin za 2-way/3-way markete, null draw handling).
+- `test/unit/models/match_test.dart` — Match.isLive, timeToKickoff, toMap/fromMap roundtrip, fromJson (Odds API parsing s league mapping-om, FormatException paths, h2h iz bookmakers array-a, basketball bez draw-a).
+- `test/unit/models/value_preset_test.dart` — 3 preseta (conservative/standard/aggressive) s testovima za matches() i edgeScore() logiku; fromString s null i unknown fallback-ima na standard.
+- `test/unit/models/recommendation_test.dart` — parseRecommendationType s line-level, inline fallback, specificity ordering (VALUE > WATCH > SKIP), none fallback, case-sensitivity.
+- `test/unit/models/bet_test.dart` — BetSelection/BetStatus enumi, isLiveBet (placedAt vs matchStartedAt), actualProfit (all 4 states), potentialPayout/Profit, copyWith, full roundtrip; int-to-double coercion.
+- `test/unit/models/bankroll_test.dart` — BankrollConfig defaultConfig, stakeAsPercentage (div-by-zero safety), roundtrip.
+- `test/unit/models/odds_snapshot_test.dart` — OddsSnapshot + OddsDrift.compute, dominantDrift (abs() ranking across home/draw/away), hasSignificantMove (3% threshold).
+- `test/unit/models/cached_matches_entry_test.dart` — age, isExpired, ageDisplay formating, roundtrip s matches list-om.
+- `test/unit/models/tipster_signal_test.dart` — preview (150-char truncation), toClaudeContext s sport fallback-om.
+- `test/unit/models/monitored_channel_test.dart` — reliabilityScore (-1 za insufficient data), reliabilityLabel (Novo/Niska/Srednja/Visoka), reliabilityColorValue, lastRelevantDisplay, copyWith.
+- `test/unit/models/analysis_log_test.dart` — UserFeedback enum, copyWith, roundtrip s fallback-om na none, generateUuid (format, uniqueness across 100 calls, UUID v4 version/variant nibbles).
+- `test/unit/models/investment_tier_test.dart` — 3-tier framework (preMatch/live/accumulator) — display, icon, horizon, philosophy, colorValue, fromString, claudeContextAppendix content assertions.
+- `test/unit/models/match_note_test.dart` — roundtrip including empty + multiline text.
+- `test/unit/models/source_score_test.dart` — SourceType maxScore (sum = 6.0), percentage computation, inactive factory, roundtrip za sve tipove.
+- `test/unit/models/football_data_signal_test.dart` — form counts (W/D/L), formScore ((W-L)/5), toClaudeContext.
+- `test/unit/models/nba_stats_signal_test.dart` — winsLast10, rest days, standings, conditional context formatting.
+- `test/unit/models/reddit_signal_test.dart` — getSentimentBias (-1 home tilt, +1 away, 0 balanced), div-by-zero safety.
+- `test/unit/models/intelligence_report_test.dart` — confluenceScore (active sources), category thresholds (< 2 sources = insufficientData, >= 4.5 = strongValue), toClaudeContext header.
+- `test/unit/models/sport_pl_test.dart` — winRate (0% for 0 bets).
+- `test/unit/models/accumulator_test.dart` — AccumulatorLeg + BetAccumulator: combinedOdds (fold), actualProfit za svih 5 statusa, correlationWarnings (same match, same league same day), copyWith.
+
+**Kreirani fajlovi (Phase 1 — providers):**
+- `test/unit/providers/navigation_controller_test.dart` — tab index state + notifyListeners (sa i bez change).
+
+### Phase 2 — Service Tests
+**Status:** Completed
+
+**Opis:** HTTP service testovi koriste `package:http/testing.dart#MockClient` za injection u konstruktore (svi servisi imaju `{http.Client? client}` constructor pattern). Test fajlovi pokrivaju happy path, HTTP error kodove (401/429/500), malformed JSON, timeout behavior, i granular parsing (npr. Reddit team mention aggregation across subreddits, Telegram update parsing sa sport/league detection).
+
+**Kreirani fajlovi:**
+- `test/unit/services/odds_api_service_test.dart` — setup, getMatches (401/429/422/500 paths, malformed JSON, individual match skip, sorting by commenceTime, multi-sport aggregation, x-requests-remaining header tracking), OddsApiException toString.
+- `test/unit/services/claude_service_test.dart` — sendMessage (text block concatenation, non-text block filtering, whitespace trim, 401/429, API error passthrough, empty content, header injection x-api-key + anthropic-version, history + system prompt payload, system omitted when null); ChatMessage toJson.
+- `test/unit/services/reddit_monitor_test.dart` — getSignalForMatch (multi-subreddit aggregation, top upvote tracking, skipping unrelated posts, case-insensitive matching, failed subreddit silent skip).
+- `test/unit/services/ball_dont_lie_service_test.dart` — non-basketball rejection, team not found, winsLast10 computation, rest days from most recent game, standings null-by-design.
+- `test/unit/services/telegram_monitor_test.dart` — token setup, testConnection success + error + malformed paths, _poll parsing s sport detection (EPL → soccer, NBA → basketball), skipping posts bez username-a ili s empty text-om.
+
+### Phase 3 — Widget Tests
+**Status:** Completed
+
+**Opis:** Widget testovi za widgete koji ne zahtijevaju Provider s Hive coupling-om. Provider-bound widgets (MatchCard, BetCard, AccumulatorCard, PlSummaryWidget, TierModeSelector, BetsFilterBar) skippani — zahtijevaju bootstrap BetsProvider/MatchesProvider/AccumulatorsProvider s Hive state-om, što bi bolje pristajalo Phase 4 integracijskim testovima.
+
+**Kreirani fajlovi:**
+- `test/widget/widgets/chat_bubble_test.dart` — text rendering, alignment (user right / assistant left), SelectableText presence, multiline.
+- `test/widget/widgets/sport_selector_test.dart` — 4 chips (All + 3 sports), icons, tap callbacks (null za All, Sport.soccer za Soccer), selected state.
+- `test/widget/widgets/odds_widget_test.dart` — "Odds unavailable" fallback, 2-way vs 3-way chips, hasDraw false blocks Draw chip, null draw handling, 2-decimal formatting.
+- `test/widget/widgets/signal_card_test.dart` — channel title/username/preview, sport icon with fallback "📨", league badge, checkbox conditional on callback, tap toggles selection, time ago formatting ("5m", "2h").
+
+### Phase 4 — Integration Tests
+**Status:** Skipped
+
+**Opis:** Integracijski testovi (full-app flows s Hive + Providers) odloženi za sljedeću sesiju. Zahtijevali bi Hive testna okruženja (Hive.initFlutter() + teardown path cleanup) i mockove za sve servise. Current coverage (unit modeli + services + pure widgets) već pokriva kritičnu logiku — integracijski testovi su follow-up.
+
+### Phase 5 — Finalization
+**Status:** Completed
+
+**Komande izvršene:**
+- `flutter test test/unit/models/` — 299 passed
+- `flutter test test/unit/providers/` — 4 passed
+- `flutter test test/unit/services/` — 56 passed
+- `flutter test test/widget/widgets/` — 27 passed
+- `flutter test test/widget_test.dart` — 2 passed (existing smoke tests)
+- `flutter test` — **388 tests passed, 0 failed**
+- `flutter analyze` — 0 issues
+
+**Verzija:** 3.1.3+12 (patch i build ostaju; nova sesija dodaje samo testove — nema behavior changes).
+
+### Finalna verifikacija Session 11:
+- flutter analyze — 0 issues
+- flutter test — **388 passed** (bio 2 → 388, povećanje 386 testova)
+- flutter build apk --debug — nije re-ran (nema src changes, samo testovi)
+- Test fajlovi kreirani: **25 novih** (20 model + 1 provider + 5 service + 4 widget + 0 integration)
+- Test direktorijska struktura finalizirana: `test/unit/models/`, `test/unit/providers/`, `test/unit/services/`, `test/widget/widgets/` (integration ostaje za buduću sesiju)
+- **Coverage overview:** svi pure-logic modeli 100% pokriveni, svi HTTP servisi osim football_data/notifications/storage (potonji zahtijeva Hive setup) pokriveni, 4 stateless widgeta pokrivena. Provider-bound widgeti ostaju za integration tests.
+- **Identified Issues:** 0 novih bugova.
+- **Backlog status:** 1 by-design (Telegram Bot API) — unchanged.
+
+---
+
+## Session 12: 2026-04-19 — Full Coverage Extension (Hive + Providers + Integration)
+
+Proširuje S11 coverage u područja koja zahtijevaju Hive bootstrap: StorageService, svi ChangeNotifier provideri, provider-bound widgeti, preostali servisi (IntelligenceAggregator, FootballDataService) plus integracijski flow-ovi koji vežu providere s Hive persistence-om.
+
+### Phase 1 — Hive test helper + StorageService tests
+**Status:** Completed
+
+**Opis:** Kreiran `test/helpers/hive_test_setup.dart` koji u svakom testu otvara Hive u svježem temp direktoriju (`Directory.systemTemp.createTemp('betsight_hive_test_')`) i inicijalizira svih 13 boxova koje `StorageService.init()` očekuje. Helper također stubba `flutter_local_notifications` platform channel mock-method-call-handler-om kako provideri koji rukuju watched-match toggle-om ne bi rušili test run s `MissingPluginException`. Svaki test poziva `setUpHive()` u `setUp` i `tearDownHive()` u `tearDown` (zatvara Hive + briše temp dir recursively).
+
+Storage test suite pokriva sve API-key roundtrip-ove, value preset, tier, notifikacijske flagove (default `true`), bet/log/signal/accumulator/report CRUD, snapshots (save/getSnapshotsForMatch/getLatestSnapshotForMatch/saveSnapshotIfChanged change detection, clearOldSnapshots TTL gate), cache entry + TTL, cleanup scheduler (24h gate + first-run), migration path (legacy channel list → detail box), sort order (signals/logs DESC, snapshots ASC, reports DESC by confluence, channels ASC).
+
+**Kreirani fajlovi:**
+- `test/helpers/hive_test_setup.dart` — 40 linija, bootstraps + teardowns Hive state + stubs notifications channel.
+- `test/unit/services/storage_service_test.dart` — 64 testa, ~500 linija.
+
+### Phase 2 — Provider tests (7 providera, svi ChangeNotifier-i)
+**Status:** Completed
+
+**Opis:** Svaki ChangeNotifier provider dobio je vlastiti test file. Za `TelegramProvider` treba stvoriti `TelegramMonitor` s mock HTTP klijentom da bi bootstrap-migracija prošla u test-okruženju. `MatchesProvider.toggleWatched` poziva `NotificationsService.scheduleKickoffReminders` — radi u testu jer platform channel stub iz `hive_test_setup.dart` vraća null, pa plugin-call prođe kao no-op.
+
+**Kreirani fajlovi:**
+- `test/unit/providers/tier_provider_test.dart` — 6 testova: storage-driven init + setTier + suggestionChips po tier-u + claudeContextAppendix passthrough.
+- `test/unit/providers/bets_provider_test.dart` — 27 testova: init, CRUD, stats, filteri, bankroll, error path.
+- `test/unit/providers/matches_provider_test.dart` — 21 test: init iz storage-a, selection, watched, drift computation, API key management, request quota getters, fetchMatches error paths. `OddsApiService` injectiran preko MockClient-a.
+- `test/unit/providers/analysis_provider_test.dart` — 19 testova: staging matches/signals, inputPrefill, sendMessage success + ClaudeException + log persistence + recordFeedback.
+- `test/unit/providers/telegram_provider_test.dart` — 17 testova: channels add/remove/migrate, token lifecycle, setEnabled, recentSignals 6h window, signalsForSport filtering, testConnection success/failure.
+- `test/unit/providers/accumulators_provider_test.dart` — 19 testova: draft lifecycle, save invariants, place → settle flow, delete.
+- `test/unit/providers/intelligence_provider_test.dart` — 9 testova: init loads reports, generateReport without aggregator, cache-hit skip, updateFootballDataApiKey, removeReportFor, isGeneratingFor.
+
+**Gotcha rezolucija:** `TelegramProvider._bootstrapChannels` je `async void`-like, pokreće se iz konstruktora i ne awaita se. U testovima se koristi `await Future<void>.delayed(const Duration(milliseconds: 50))` nakon konstrukcije da bi migracija stigla završiti prije assert-a.
+
+### Phase 3 — Provider-bound widget tests
+**Status:** Completed (s 1 dokumentiranim infrastructure backlog-om — vidi Identified Issues)
+
+**Opis:** Widgeti testirani su s `ChangeNotifierProvider.value` wrapperom i pravim `BetsProvider` / `AccumulatorsProvider` / `TierProvider` (koji sada rade u test-okruženju zahvaljujući Hive setUp-u).
+
+**Kreirani fajlovi:**
+- `test/widget/widgets/tier_mode_selector_test.dart` — 3 smoke testa: render 3 pill-a, ikone, broj GestureDetector-a (3). Tap-to-switch i selected-border introspection isključeni — `pumpAndSettle` i `widgetList<AnimatedContainer>` ulaze u infinite loop zbog kombinacije AnimatedContainer (200 ms implicit transition) i async Hive write-a u `TierProvider.setTier`. Bavljenje taps-om ostaje za buduću iteraciju.
+- `test/widget/widgets/bet_card_test.dart` — 7 testova: render league/teams/pick/odds/stake, Settle button za pending, +profit/-stake za won/lost, void → 0.00, status chip, izostanak bookmaker chip-a kad je null.
+- `test/widget/widgets/accumulator_card_test.dart` — 4 testa: leg count header, prva 3 leg retka, "+N more" za >3 legs, status chip.
+- `test/widget/widgets/bets_filter_bar_test.dart` — 6 testova: search TextField + trim/lowercase propagacija, 3 filter chipa, Clear chip conditional, Sport chip label update na toggle.
+
+### Phase 4 — IntelligenceAggregator + FootballData service tests
+**Status:** Completed
+
+**Kreirani fajlovi:**
+- `test/unit/services/intelligence_aggregator_test.dart` — 10 testova: Odds scoring po pravilima (base 0.5, sharp +0.5, significant drift +0.5, non-Home direction +0.5), Football-Data inactive paths (no service, non-soccer), NBA inactive, Reddit inactive, Telegram "No signals", report assembly (svih 5 SourceType-a uključeno).
+- `test/unit/services/football_data_service_test.dart` — 11 testova: setup, error paths (no key, unsupported sport, 403, 429, no match found), happy path (EPL team fuzzy match + full signal build), FC/AFC suffix stripping (Manchester United vs City), standings optional (500 → null positions).
+
+### Phase 5 — Integration tests
+**Status:** Completed
+
+**Opis:** End-to-end provider flow testovi koji koriste pravu Hive persistence (via helper). Cilj: verificirati da provider + storage hooks sjede zajedno kroz realne user pattern-e (ne samo jedan metod poziv).
+
+**Kreirani fajlovi:**
+- `test/integration/flows/bet_flow_test.dart` — 5 flow-ova: place → settle won → stats, multi-sport P&L breakdown, persistence across provider instances, filters chaining, settled storage roundtrip.
+- `test/integration/flows/accumulator_flow_test.dart` — 4 flow-a: build → save → place → settle (persists across reload), correlation warning za same-league-same-day, removeLeg leaves valid 2-leg draft savable, delete cleans both.
+- `test/integration/flows/intelligence_flow_test.dart` — 3 flow-a: wireAggregator → generateReport → persist → reload, generateReport bez wire-a surfaces config error, removeReportFor cleans both.
+
+### Phase 6 — Finalization
+**Status:** Completed
+
+**Komande izvršene:**
+- `flutter test test/unit/services/storage_service_test.dart` — 64 passed
+- `flutter test test/unit/providers/` — 122 passed (S12 doprinosi 7 fajlova × ukupno 118 testova; 4 testa su iz S11 navigation_controller_test)
+- `flutter test test/unit/services/intelligence_aggregator_test.dart` — 10 passed
+- `flutter test test/unit/services/football_data_service_test.dart` — 11 passed
+- `flutter test test/integration/` — 12 passed
+- `flutter test` (cijela suite uključujući S11 + S12) — 623 passed
+- `flutter analyze` — 0 issues
+
+### Finalna verifikacija Session 12:
+- flutter analyze — 0 issues
+- flutter test (cijela suite) — **623 passed**
+- Kumulativno od S11: 388 → 623 testa (povećanje +235)
+- Novih test fajlova u S12: 18 (1 helper, 1 storage_service test, 2 service testa — aggregator + football_data, 7 provider testova, 4 widget testa, 3 integracijska testa)
+- **Coverage overview:** Hive-backed StorageService pokriven, svi ChangeNotifier provideri pokriveni (init, mutations, persistence), preostali servisi pokriveni, 3 integracijska flow-a pokrivena.
+- **Identified Issues:**
+  - **TierModeSelector test — tap + border introspection hang** — `tester.tap(find.text('Live'))` praćen `pumpAndSettle`-om ulazi u infinite loop (kombinacija implicit AnimatedContainer + async `TierProvider.setTier` Hive write). Slično se događa s `tester.widgetList<AnimatedContainer>` introspection-om nakon setTier. Kept 3 smoke testova (render pills, icons, GestureDetector count = 3) — tap-to-switch i border-state assertion ostaju za sljedeću sesiju (vjerojatno rješenje: `fakeAsync` wrapper ili alternativa bez AnimatedContainer-a).
+- **Backlog status:** 1 by-design + 1 test-infrastructure (TierModeSelector tap + pumpAndSettle).
+
+---
+
 ## Identified Issues
 
 ### By-Design (Will Not Fix)

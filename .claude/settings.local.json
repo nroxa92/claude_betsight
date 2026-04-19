@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/SeaDoo/AppData/Local/Temp/claude/C--Users-SeaDoo-Desktop-claude-betsight/4baf7d40-6bf8-4ed2-b312-f49d58b1675b/tasks/**)"
+    ]
+  }
+}
